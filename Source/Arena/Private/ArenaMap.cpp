@@ -1,5 +1,6 @@
 #include "ArenaMap.h"
 #include "Arena.h"
+#include "ArenaAudio.h"
 #include "ArenaCharacter.h"
 #include "ArenaVisuals.h"
 #include "Components/BoxComponent.h"
@@ -283,7 +284,13 @@ void AArenaJumpPad::Init(const FVector& InLaunchVelocity)
 void AArenaJumpPad::OnOverlap(UPrimitiveComponent* OverlappedComp, AActor* Other, UPrimitiveComponent* OtherComp, int32 BodyIndex, bool bFromSweep, const FHitResult& Sweep)
 {
 	AArenaCharacter* Character = Cast<AArenaCharacter>(Other);
-	if (Character && !Character->IsDead() && (Character->HasAuthority() || Character->IsLocallyControlled()))
+	if (!Character || Character->IsDead())
+	{
+		return;
+	}
+	UArenaAudio::PlayAt(this, EArenaSound::JumpPad, GetActorLocation());
+	// Launch where movement is simulated authoritatively or predicted.
+	if (Character->HasAuthority() || Character->IsLocallyControlled())
 	{
 		Character->LaunchCharacter(LaunchVelocity, true, true);
 	}

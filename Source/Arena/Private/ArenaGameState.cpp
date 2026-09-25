@@ -1,4 +1,5 @@
 #include "ArenaGameState.h"
+#include "ArenaAudio.h"
 #include "ArenaCharacter.h"
 #include "ArenaMap.h"
 #include "ArenaMovementComponent.h"
@@ -73,17 +74,26 @@ void AArenaGameState::SpawnShotVisual(UWorld* World, const AArenaCharacter* Shoo
 
 void AArenaGameState::MulticastShot_Implementation(AArenaCharacter* Shooter, EArenaWeapon Weapon, FVector_NetQuantize End)
 {
-	// The shooting client already drew its own predicted tracer.
-	if (!Shooter || (Shooter->IsLocallyControlled() && !Shooter->HasAuthority()))
+	if (!Shooter)
 	{
 		return;
 	}
-	SpawnShotVisual(GetWorld(), Shooter, Weapon, End);
+	// The shooter already played the sound locally, and a remote shooter
+	// already drew its own predicted tracer.
+	if (!Shooter->IsLocallyControlled())
+	{
+		UArenaAudio::PlayAt(this, GetFireSound(Weapon), Shooter->GetMuzzleLocation(), 1.f, FMath::FRandRange(0.97f, 1.03f));
+	}
+	if (!(Shooter->IsLocallyControlled() && !Shooter->HasAuthority()))
+	{
+		SpawnShotVisual(GetWorld(), Shooter, Weapon, End);
+	}
 }
 
-void AArenaGameState::MulticastExplosion_Implementation(FVector_NetQuantize Location, FLinearColor Color, float Radius)
+void AArenaGameState::MulticastExplosion_Implementation(FVector_NetQuantize Location, FLinearColor Color, float Radius, EArenaSound Sound)
 {
 	ArenaVisuals::SpawnBlast(GetWorld(), Location, Color, Radius, 0.35f);
+	UArenaAudio::PlayAt(this, Sound, Location);
 }
 
 void AArenaGameState::MulticastKill_Implementation(const FString& Killer, const FString& Victim, EArenaWeapon Weapon)

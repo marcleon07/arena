@@ -4,9 +4,9 @@ A classic arena deathmatch shooter (Quake 3 style) in Unreal Engine 5 C++, with
 **Half-Life 1 / GoldSrc movement**: air strafing, bunnyhopping, crouch-jumping,
 rocket jumping and jump pads. Up to 16 players over listen or dedicated servers.
 
-The project has **no content assets**. The map, lighting, player models, weapons
-and effects are all generated in code from the engine's built-in shapes, so the
-repository is just C++ and config.
+The map, lighting, player models, weapons and effects are all generated in code
+from the engine's built-in shapes. The only content assets are the sound effects,
+which are synthesized by a script (see [Sounds](#sounds)).
 
 ## Requirements
 
@@ -31,6 +31,7 @@ or you can set `UE_ROOT` yourself.
 | `Host.bat` | Starts a listen server (you play and host) |
 | `Join.bat [ip]` | Joins a server (defaults to `127.0.0.1`) |
 | `DedicatedServer.bat` | Headless server on port 7777 |
+| `ImportSounds.bat` | Regenerates and re-imports the sound effects |
 
 Match options go on the URL: `Host.bat` passes extra args through, or from the
 console: `open /Engine/Maps/Entry?listen?FragLimit=30?TimeLimit=15`.
@@ -94,6 +95,28 @@ Health (+25), Mega Health (+100, max 200), Armor (+50), Heavy Armor (+100), and
 ammo boxes all respawn on Quake 3 timers. Armor absorbs 66% of damage. Health and
 armor above 100 count down one point per second.
 
+## Combat feedback
+
+- **Hit sound** on every hit you land, pitched by damage (Quake 3 style), plus a hit
+  marker on the crosshair (red on the killing blow) and a floating damage number.
+- **Taking damage** flashes the screen red and shows an arc around the crosshair
+  pointing toward the shooter or explosion.
+- **Frag messages** in the center: "You fragged X / 2nd place with 7", or "Fragged by X".
+- Weapon, explosion, pain, death, footstep (every 0.3 s when running, silent when
+  ducked), jump, landing, jump pad, pickup and spawn sounds, all positional.
+
+## Sounds
+
+`Tools/generate_sounds.py` synthesizes every effect (pure Python, no dependencies)
+into `SourceAudio/*.wav`, and `Tools/import_sounds.py` imports them into
+`Content/Audio` through the editor. `Scripts/ImportSounds.bat` runs both. Close the
+editor first.
+
+To use a real sound instead, drop a WAV with the same name (e.g. `RailFire.wav`)
+into `SourceAudio/`. Then run only the import step, or import it in the editor over
+the existing asset. The game loads sounds by name from `/Game/Audio`, and a missing
+sound is skipped with a log warning.
+
 ## Code map
 
 | File | Role |
@@ -105,12 +128,13 @@ armor above 100 count down one point per second.
 | `ArenaGameState` | Replicated match state, `sv_airaccelerate`, effect multicasts, kill feed |
 | `ArenaMap` | The generated level (geometry, jump pads, lighting) and spawn/item layout |
 | `ArenaRocket`, `ArenaPickup` | Projectile and items |
-| `ArenaHUD` | Canvas HUD and scoreboard |
+| `ArenaHUD` | Canvas HUD, scoreboard, hit markers, damage numbers and indicators |
+| `ArenaAudio` | Loads `/Game/Audio` and plays 2D and positional sounds |
 
 ## Known limitations
 
 - Hitscan has no lag compensation, so at high ping you have to lead your shots.
-- Visuals are placeholders built from engine shapes. The project has no audio yet.
+- Visuals are placeholders built from engine shapes, and the sounds are synthesized placeholders.
 - The level is built at runtime on top of the engine's empty `Entry` map. If your
   engine version shows something odd there, create an empty level
   (File → New Level → Empty Level), save it as `/Game/Maps/Arena`, and point the

@@ -1,4 +1,5 @@
 #include "ArenaRocket.h"
+#include "ArenaAudio.h"
 #include "ArenaCharacter.h"
 #include "ArenaGameState.h"
 #include "ArenaTypes.h"
@@ -53,10 +54,16 @@ void AArenaRocket::BeginPlay()
 	Super::BeginPlay();
 
 	ArenaVisuals::SetColor(Mesh, RocketColor);
-	if (APawn* Shooter = GetInstigator())
+	APawn* Shooter = GetInstigator();
+	if (Shooter)
 	{
 		Collision->IgnoreActorWhenMoving(Shooter, true);
 		ShooterController = Shooter->GetController();
+	}
+	// The shooter heard their own launch when they pulled the trigger.
+	if (!Shooter || !Shooter->IsLocallyControlled())
+	{
+		UArenaAudio::PlayAt(this, EArenaSound::RocketFire, GetActorLocation());
 	}
 	Movement->OnProjectileStop.AddDynamic(this, &AArenaRocket::OnStop);
 }
@@ -89,7 +96,7 @@ void AArenaRocket::Explode(const FVector& Location, AActor* DirectHit)
 	AArenaCharacter* DirectVictim = Cast<AArenaCharacter>(DirectHit);
 	if (DirectVictim)
 	{
-		DirectVictim->ApplyArenaDamage(DirectDamage, Shooter, ArenaKnockback(Forward, DirectDamage), EArenaWeapon::RocketLauncher);
+		DirectVictim->ApplyArenaDamage(DirectDamage, Shooter, ArenaKnockback(Forward, DirectDamage), EArenaWeapon::RocketLauncher, Location);
 	}
 
 	// Splash, measured to the nearest point of each capsule (like Quake's bbox test),
@@ -124,12 +131,12 @@ void AArenaRocket::Explode(const FVector& Location, AActor* DirectHit)
 		const float Points = SplashDamage * (1.f - Dist / SplashRadius);
 		// Quake 3 biases splash knockback upward (dir.z += 24) to make rocket jumps pop.
 		const FVector Dir = (Center - Location) + FVector(0.f, 0.f, QU(24.f));
-		Victim->ApplyArenaDamage(Points, Shooter, ArenaKnockback(Dir, Points), EArenaWeapon::RocketLauncher);
+		Victim->ApplyArenaDamage(Points, Shooter, ArenaKnockback(Dir, Points), EArenaWeapon::RocketLauncher, Location);
 	}
 
 	if (AArenaGameState* GS = World->GetGameState<AArenaGameState>())
 	{
-		GS->MulticastExplosion(Location, RocketColor, SplashRadius * 0.8f);
+		GS->MulticastExplosion(Location, RocketColor, SplashRadius * 0.8f, EArenaSound::RocketExplode);
 	}
 	Destroy();
 }

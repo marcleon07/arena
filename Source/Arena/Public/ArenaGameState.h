@@ -54,7 +54,7 @@ public:
 	void MulticastShot(AArenaCharacter* Shooter, EArenaWeapon Weapon, FVector_NetQuantize End);
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastExplosion(FVector_NetQuantize Location, FLinearColor Color, float Radius);
+	void MulticastExplosion(FVector_NetQuantize Location, FLinearColor Color, float Radius, EArenaSound Sound);
 
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastKill(const FString& Killer, const FString& Victim, EArenaWeapon Weapon);

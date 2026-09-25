@@ -49,6 +49,40 @@ inline FVector ArenaKnockback(const FVector& Dir, float Damage)
 	return Dir.GetSafeNormal() * QU(5.f * FMath::Min(Damage, 200.f));
 }
 
+/** Sound effects, loaded from /Game/Audio/<Name>. Order matches Tools/generate_sounds.py. */
+UENUM(BlueprintType)
+enum class EArenaSound : uint8
+{
+	None,
+	Hit,
+	Kill,
+	MachineGunFire,
+	RocketFire,
+	RocketExplode,
+	RailFire,
+	Jump,
+	Land,
+	Footstep,
+	Pain,
+	Pickup,
+	WeaponPickup,
+	JumpPad,
+	Death,
+	Spawn,
+	NoAmmo,
+	Count UMETA(Hidden)
+};
+
+inline EArenaSound GetFireSound(EArenaWeapon Weapon)
+{
+	switch (Weapon)
+	{
+	case EArenaWeapon::RocketLauncher: return EArenaSound::RocketFire;
+	case EArenaWeapon::Railgun:        return EArenaSound::RailFire;
+	default:                           return EArenaSound::MachineGunFire;
+	}
+}
+
 UENUM(BlueprintType)
 enum class EArenaPickupType : uint8
 {

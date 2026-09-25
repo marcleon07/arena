@@ -1,5 +1,6 @@
 #include "ArenaCharacter.h"
 #include "Arena.h"
+#include "ArenaAudio.h"
 #include "ArenaMovementComponent.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
@@ -106,6 +107,7 @@ void AArenaCharacter::BeginPlay()
 	}
 	UpdateColors();
 	UpdateWeaponVisuals();
+	UArenaAudio::PlayAt(this, EArenaSound::Spawn, GetActorLocation(), 0.7f);
 }
 
 void AArenaCharacter::PossessedBy(AController* NewController)
@@ -169,6 +171,8 @@ void AArenaCharacter::Tick(float DeltaSeconds)
 	// Third-person gun follows aim pitch (replicated via RemoteViewPitch).
 	WorldGunMesh->SetRelativeRotation(FRotator(GetBaseAimRotation().Pitch, 0.f, 0.f));
 
+	UpdateMovementSounds(DeltaSeconds);
+
 	// Health and armor above 100 count down one point per second (Quake 3).
 	if (HasAuthority() && !bDead)
 	{
@@ -179,6 +183,53 @@ void AArenaCharacter::Tick(float DeltaSeconds)
 			if (Health > 100) { --Health; }
 			if (Armor > 100) { --Armor; }
 		}
+	}
+}
+
+void AArenaCharacter::UpdateMovementSounds(float DeltaSeconds)
+{
+	const UCharacterMovementComponent* Move = GetCharacterMovement();
+	const bool bOnGround = Move->IsMovingOnGround();
+	const FVector Velocity = GetVelocity();
+
+	if (bWasOnGround && !bOnGround && Velocity.Z > QU(100.f))
+	{
+		UArenaAudio::PlayAt(this, EArenaSound::Jump, GetActorLocation(), 0.35f, FMath::FRandRange(0.95f, 1.05f));
+	}
+	else if (!bWasOnGround && bOnGround)
+	{
+		const float FallSpeed = -LastVelocityZ;
+		if (FallSpeed > QU(250.f))
+		{
+			UArenaAudio::PlayAt(this, EArenaSound::Land, GetActorLocation(), FMath::GetMappedRangeValueClamped(FVector2D(QU(250.f), QU(700.f)), FVector2D(0.35f, 1.f), FallSpeed));
+		}
+		FootstepTimer = 0.2f;
+	}
+
+	// GoldSrc: a footstep every 0.3 s when running, 0.4 s when walking; silent when ducked or slow.
+	const float Speed = Velocity.Size2D();
+	if (bOnGround && !bIsCrouched && Speed > QU(150.f))
+	{
+		FootstepTimer -= DeltaSeconds;
+		if (FootstepTimer <= 0.f)
+		{
+			UArenaAudio::PlayAt(this, EArenaSound::Footstep, GetActorLocation() - FVector(0.f, 0.f, QU(30.f)), 0.5f, FMath::FRandRange(0.85f, 1.15f));
+			FootstepTimer = Speed > QU(220.f) ? 0.3f : 0.4f;
+		}
+	}
+
+	bWasOnGround = bOnGround;
+	LastVelocityZ = Velocity.Z;
+}
+
+void AArenaCharacter::OnRep_Health(int32 OldHealth)
+{
+	// Ignore the 1 point/s tick-down above 100.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!bDead && Health > 0 && OldHealth - Health >= 2 && Now - LastPainTime > 0.3f)
+	{
+		LastPainTime = Now;
+		UArenaAudio::PlayAt(this, EArenaSound::Pain, GetActorLocation(), 0.8f, FMath::FRandRange(0.9f, 1.1f));
 	}
 }
 
@@ -353,6 +404,8 @@ void AArenaCharacter::TryFire()
 	}
 	if (GetAmmo(CurrentWeapon) <= 0)
 	{
+		UArenaAudio::Play2D(this, EArenaSound::NoAmmo, 0.6f);
+		NextFireTime = Now + 0.4f;
 		OnNextWeapon();
 		return;
 	}
@@ -360,6 +413,8 @@ void AArenaCharacter::TryFire()
 	const FArenaWeaponInfo& Info = GetWeaponInfo(CurrentWeapon);
 	NextFireTime = Now + Info.RefireTime;
 	ViewKick = 1.f;
+	// Your own gun is heard without spatialization; others hear it via the server's multicast.
+	UArenaAudio::Play2D(this, GetFireSound(CurrentWeapon), 0.6f, FMath::FRandRange(0.97f, 1.03f));
 
 	const FVector Origin = Camera->GetComponentLocation();
 	const FVector Dir = GetControlRotation().Vector();
@@ -436,7 +491,7 @@ void AArenaCharacter::FireHitscan(const FVector& Origin, const FVector& Dir, EAr
 		{
 			break;
 		}
-		Victim->ApplyArenaDamage(Info.Damage, GetController(), ArenaKnockback(ShotDir, Info.Damage), Weapon);
+		Victim->ApplyArenaDamage(Info.Damage, GetController(), ArenaKnockback(ShotDir, Info.Damage), Weapon, Origin);
 		Params.AddIgnoredActor(Victim);
 		TraceStart = Hit.ImpactPoint;
 		VisualEnd = End;
@@ -461,7 +516,7 @@ void AArenaCharacter::FireRocket(const FVector& Origin, const FVector& Dir)
 // Damage, pickups, death
 // ---------------------------------------------------------------------------
 
-void AArenaCharacter::ApplyArenaDamage(float Damage, AController* InstigatorController, const FVector& Knockback, EArenaWeapon Weapon)
+void AArenaCharacter::ApplyArenaDamage(float Damage, AController* InstigatorController, const FVector& Knockback, EArenaWeapon Weapon, const FVector& SourceLocation)
 {
 	if (!HasAuthority() || bDead)
 	{
@@ -479,8 +534,19 @@ void AArenaCharacter::ApplyArenaDamage(float Damage, AController* InstigatorCont
 	const bool bSelf = InstigatorController && InstigatorController == GetController();
 	const int32 Points = FMath::CeilToInt(bSelf ? Damage * 0.5f : Damage);
 	const int32 Absorbed = FMath::Min(FMath::CeilToInt(Points * 0.66f), Armor);
+	const int32 OldHealth = Health;
 	Armor -= Absorbed;
 	Health -= Points - Absorbed;
+	OnRep_Health(OldHealth); // Pain sound on a listen server; clients get it via replication.
+
+	if (AArenaPlayerController* Attacker = Cast<AArenaPlayerController>(InstigatorController); Attacker && !bSelf)
+	{
+		Attacker->ClientHitConfirmed(GetActorLocation(), Points, Health <= 0);
+	}
+	if (AArenaPlayerController* VictimPC = Cast<AArenaPlayerController>(GetController()))
+	{
+		VictimPC->ClientTookDamage(SourceLocation, Points);
+	}
 
 	if (Health <= 0)
 	{
@@ -553,7 +619,7 @@ void AArenaCharacter::Die(AController* Killer, EArenaWeapon Weapon)
 
 	if (AArenaGameState* GS = GetWorld()->GetGameState<AArenaGameState>())
 	{
-		GS->MulticastExplosion(GetActorLocation(), FLinearColor(0.6f, 0.02f, 0.02f), QU(60.f));
+		GS->MulticastExplosion(GetActorLocation(), FLinearColor(0.6f, 0.02f, 0.02f), QU(60.f), EArenaSound::Death);
 	}
 	if (AArenaGameMode* GM = GetWorld()->GetAuthGameMode<AArenaGameMode>())
 	{
