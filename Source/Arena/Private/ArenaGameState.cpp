@@ -3,6 +3,7 @@
 #include "ArenaCharacter.h"
 #include "ArenaMap.h"
 #include "ArenaMovementComponent.h"
+#include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
 #include "ArenaVisuals.h"
 #include "Net/UnrealNetwork.h"
@@ -18,7 +19,7 @@ void AArenaGameState::BeginPlay()
 
 	// The level is generated from code on every machine (server and clients), so
 	// the geometry needs no replication and is identical everywhere.
-	ArenaMap::BuildLocal(GetWorld());
+	ArenaMap::BuildLocal(GetWorld(), MapId);
 }
 
 void AArenaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -28,11 +29,51 @@ void AArenaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AArenaGameState, FragLimit);
 	DOREPLIFETIME(AArenaGameState, MatchEndTime);
 	DOREPLIFETIME(AArenaGameState, WinnerName);
+	DOREPLIFETIME(AArenaGameState, MapId);
+	DOREPLIFETIME(AArenaGameState, VoteOptions);
+	DOREPLIFETIME(AArenaGameState, VoteCounts);
+	DOREPLIFETIME(AArenaGameState, VoteEndTime);
 }
 
 bool AArenaGameState::IsMenuWorld(const UWorld* World)
 {
 	return World && World->GetNetMode() == NM_Standalone;
+}
+
+void AArenaGameState::HandleMatchHasEnded()
+{
+	Super::HandleMatchHasEnded();
+
+	// Runs on the server and every client: show the vote to local players.
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		AArenaPlayerController* PC = Cast<AArenaPlayerController>(It->Get());
+		if (PC && PC->IsLocalController())
+		{
+			PC->ShowMapVote();
+		}
+	}
+}
+
+float AArenaGameState::GetVoteTimeRemaining() const
+{
+	return FMath::Max(0.f, VoteEndTime - GetServerWorldTimeSeconds());
+}
+
+void AArenaGameState::RecountVotes()
+{
+	VoteCounts.Init(0, VoteOptions.Num());
+	for (APlayerState* PS : PlayerArray)
+	{
+		if (const AArenaPlayerState* APS = Cast<AArenaPlayerState>(PS))
+		{
+			const int32 Index = VoteOptions.IndexOfByKey(APS->VotedMap);
+			if (VoteCounts.IsValidIndex(Index))
+			{
+				++VoteCounts[Index];
+			}
+		}
+	}
 }
 
 float AArenaGameState::GetTimeRemaining() const

@@ -10,7 +10,8 @@ class AArenaPlayerState;
 
 /**
  * Free-for-all deathmatch. Options on the URL override config, e.g.
- *   open /Engine/Maps/Entry?listen?FragLimit=30?TimeLimit=15
+ *   open /Engine/Maps/Entry?listen?Arena=Skyline?FragLimit=30?TimeLimit=15
+ * When a match ends, players vote on the next map for VoteDuration seconds.
  */
 UCLASS(Config = Game)
 class ARENA_API AArenaGameMode : public AGameMode
@@ -21,6 +22,7 @@ public:
 	AArenaGameMode();
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	virtual void InitGameState() override;
 	virtual void StartPlay() override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -29,6 +31,11 @@ public:
 	virtual bool PlayerCanRestart_Implementation(APlayerController* Player) override;
 
 	void OnPlayerKilled(AController* Killer, AController* Victim, EArenaWeapon Weapon);
+
+	/** Server: a player picked a map in the end-of-match vote. */
+	void CastVote(APlayerController* Voter, FName Map);
+
+	FName GetMapId() const { return MapId; }
 
 	/** Respawns a dead player once AutoRespawnDelay (or ClickRespawnDelay if bRequested) has passed. */
 	void TryRespawn(AArenaPlayerController* PC, bool bRequested);
@@ -46,19 +53,26 @@ public:
 	UPROPERTY(Config)
 	float ClickRespawnDelay = 1.f;
 
+	/** Seconds the end-of-match scoreboard and map vote stay up. */
+	UPROPERTY(Config)
+	float VoteDuration = 15.f;
+
 protected:
 	virtual void HandleMatchHasStarted() override;
 	virtual void HandleMatchHasEnded() override;
 
 	void FinishMatch(AArenaPlayerState* Winner);
-	void SendFragMessages(AController* Killer, AController* Victim, AArenaPlayerState* KillerPS, AArenaPlayerState* VictimPS);
+	void SendFragMessages(AController* Killer, AController* Victim, AArenaPlayerState* KillerPS, AArenaPlayerState* VictimPS, EArenaWeapon Weapon);
 	void SpawnPickups();
 	void EnsureSpawnPoints();
+	void StartMapVote();
+	void FinishMapVote();
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> SpawnPoints;
 
 private:
+	FName MapId;
 	int32 NextColorIndex = 0;
 	FTimerHandle RestartTimer;
 };

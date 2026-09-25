@@ -13,6 +13,8 @@
 #include "GameFramework/PlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "ArenaMap.h"
+#include "SArenaMapVote.h"
 #include "SArenaMenu.h"
 #include "Widgets/SWeakWidget.h"
 #include "EnhancedInputComponent.h"
@@ -175,6 +177,7 @@ void AArenaPlayerController::BeginPlay()
 
 void AArenaPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	HideMapVote();
 	CloseMenu();
 	Super::EndPlay(EndPlayReason);
 }
@@ -190,10 +193,11 @@ void AArenaPlayerController::PlayerTick(float DeltaTime)
 
 void AArenaPlayerController::UpdateMenuCamera(float DeltaTime)
 {
+	const AArenaGameState* GS = GetWorld()->GetGameState<AArenaGameState>();
+	const FArenaMapDef& Map = ArenaMap::Get(GS ? GS->MapId : NAME_None);
 	MenuCameraAngle += DeltaTime * 4.f;
 	const float Rad = FMath::DegreesToRadians(MenuCameraAngle);
-	// Stay inside the outer walls (at 3200) and well above the towers (800).
-	const FVector Location(FMath::Cos(Rad) * 2800.f, FMath::Sin(Rad) * 2800.f, 1600.f);
+	const FVector Location(FMath::Cos(Rad) * Map.MenuOrbitRadius, FMath::Sin(Rad) * Map.MenuOrbitRadius, Map.MenuOrbitHeight);
 	const FVector Focus(0.f, 0.f, 300.f);
 	MenuCamera->SetActorLocationAndRotation(Location, (Focus - Location).Rotation());
 	if (GetViewTarget() != MenuCamera)
@@ -229,8 +233,13 @@ void AArenaPlayerController::OpenMenu()
 	Viewport->AddViewportWidgetContent(MenuContainer.ToSharedRef(), 100);
 
 	// The match keeps running (it's multiplayer); the menu just takes the input.
+	SetUIInputFor(MenuWidget);
+}
+
+void AArenaPlayerController::SetUIInputFor(TSharedPtr<SWidget> Widget)
+{
 	FInputModeUIOnly Mode;
-	Mode.SetWidgetToFocus(MenuWidget);
+	Mode.SetWidgetToFocus(Widget);
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	SetInputMode(Mode);
 	SetShowMouseCursor(true);
@@ -250,15 +259,60 @@ void AArenaPlayerController::CloseMenu()
 	MenuWidget.Reset();
 	MenuContainer.Reset();
 
+	// Back to the vote if the match is over, otherwise back to playing.
+	if (VoteWidget.IsValid())
+	{
+		SetUIInputFor(VoteWidget);
+		return;
+	}
 	SetInputMode(FInputModeGameOnly());
 	SetShowMouseCursor(false);
+}
+
+void AArenaPlayerController::ShowMapVote()
+{
+	UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	if (VoteWidget.IsValid() || !IsLocalController() || !Viewport)
+	{
+		return;
+	}
+	VoteWidget = SNew(SArenaMapVote).Owner(this);
+	VoteContainer = SNew(SWeakWidget).PossiblyNullContent(VoteWidget);
+	// Below the menu (100) so Esc still opens it on top.
+	Viewport->AddViewportWidgetContent(VoteContainer.ToSharedRef(), 50);
+	if (!IsMenuOpen())
+	{
+		SetUIInputFor(VoteWidget);
+	}
+}
+
+void AArenaPlayerController::HideMapVote()
+{
+	if (!VoteWidget.IsValid())
+	{
+		return;
+	}
+	if (UGameViewportClient* Viewport = GetWorld() ? GetWorld()->GetGameViewport() : nullptr)
+	{
+		Viewport->RemoveViewportWidgetContent(VoteContainer.ToSharedRef());
+	}
+	VoteWidget.Reset();
+	VoteContainer.Reset();
+}
+
+void AArenaPlayerController::ServerVoteMap_Implementation(FName Map)
+{
+	if (AArenaGameMode* GM = GetWorld()->GetAuthGameMode<AArenaGameMode>())
+	{
+		GM->CastVote(this, Map);
+	}
 }
 
 void AArenaPlayerController::HostGame()
 {
 	const UArenaSettings* Settings = UArenaSettings::Get();
 	UGameplayStatics::OpenLevel(this, FName(TEXT("/Engine/Maps/Entry")), true,
-		FString::Printf(TEXT("listen?FragLimit=%d?TimeLimit=%d"), Settings->HostFragLimit, Settings->HostTimeLimit));
+		FString::Printf(TEXT("listen?Arena=%s?FragLimit=%d?TimeLimit=%d"), *Settings->HostMap.ToString(), Settings->HostFragLimit, Settings->HostTimeLimit));
 }
 
 void AArenaPlayerController::JoinGame(const FString& Address)

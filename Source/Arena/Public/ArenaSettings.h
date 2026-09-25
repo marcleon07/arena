@@ -95,6 +95,9 @@ public:
 	FString LastJoinAddress = TEXT("127.0.0.1");
 
 	UPROPERTY(Config)
+	FName HostMap = TEXT("Courtyard");
+
+	UPROPERTY(Config)
 	int32 HostFragLimit = 20;
 
 	/** Minutes; 0 means no time limit. */

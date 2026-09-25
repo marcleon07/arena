@@ -1,4 +1,5 @@
-#include "SArenaMenu.h"
+﻿#include "SArenaMenu.h"
+#include "ArenaMap.h"
 #include "ArenaPlayerController.h"
 #include "ArenaSettings.h"
 #include "Brushes/SlateColorBrush.h"
@@ -263,8 +264,52 @@ TSharedRef<SWidget> SArenaMenu::MakeMainPage()
 TSharedRef<SWidget> SArenaMenu::MakeHostPage()
 {
 	UArenaSettings* Settings = UArenaSettings::Get();
+
+	// One button per map; the chosen one is highlighted, with its description below.
+	TSharedRef<SHorizontalBox> MapButtons = SNew(SHorizontalBox);
+	const TArray<FArenaMapDef>& Maps = ArenaMap::GetMaps();
+	for (int32 i = 0; i < Maps.Num(); ++i)
+	{
+		const FName Id = Maps[i].Id;
+		MapButtons->AddSlot().FillWidth(1.f).Padding(i == 0 ? 0.f : 5.f, 0.f, i == Maps.Num() - 1 ? 0.f : 5.f, 0.f)
+		[
+			SNew(SBox)
+			.HeightOverride(44.f)
+			[
+				SNew(SButton)
+				.ButtonStyle(&KeyButtonStyle)
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				.OnClicked_Lambda([Settings, Id] { Settings->HostMap = Id; return FReply::Handled(); })
+				[
+					SNew(STextBlock)
+					.Text(Maps[i].DisplayName)
+					.Font(Font("Bold", 15))
+					.ColorAndOpacity_Lambda([Settings, Id]
+					{
+						return FSlateColor(ArenaMap::Get(Settings->HostMap).Id == Id ? Accent : TextColor);
+					})
+				]
+			]
+		];
+	}
+
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot().AutoHeight()[MakeHeading(LOCTEXT("HostHeading", "Host a deathmatch"))]
+		+ SVerticalBox::Slot().AutoHeight()[MakeLabel(LOCTEXT("Map", "Map"))]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 6.f)[MapButtons]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 16.f)
+		[
+			SNew(SBox)
+			.MinDesiredHeight(36.f)
+			[
+				SNew(STextBlock)
+				.Font(Font("Regular", 12))
+				.ColorAndOpacity(DimText)
+				.AutoWrapText(true)
+				.Text_Lambda([Settings] { return ArenaMap::Get(Settings->HostMap).Description; })
+			]
+		]
 		+ SVerticalBox::Slot().AutoHeight()
 		[
 			MakeSliderRow(LOCTEXT("FragLimit", "Frag limit"), 5.f, 100.f, 5.f, 0,

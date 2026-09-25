@@ -24,6 +24,10 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_ColorIndex)
 	int32 ColorIndex = 0;
 
+	/** Map this player voted for at the end of the match (None = no vote). */
+	UPROPERTY(Replicated)
+	FName VotedMap;
+
 protected:
 	UFUNCTION()
 	void OnRep_ColorIndex();

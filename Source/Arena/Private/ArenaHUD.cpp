@@ -362,7 +362,7 @@ void AArenaHUD::DrawKillFeed(const AArenaGameState* GS)
 			continue;
 		}
 		const FString Line = Entry.Killer.IsEmpty()
-			? FString::Printf(TEXT("%s died"), *Entry.Victim)
+			? (Entry.Weapon == EArenaWeapon::Count ? FString::Printf(TEXT("%s fell into the void"), *Entry.Victim) : FString::Printf(TEXT("%s died"), *Entry.Victim))
 			: FString::Printf(TEXT("%s  [%s]  %s"), *Entry.Killer, GetWeaponInfo(Entry.Weapon).Name, *Entry.Victim);
 		DrawText(Line, TextColor, 30.f * UIScale, Y, Font, 1.1f * UIScale);
 		Y += 22.f * UIScale;
