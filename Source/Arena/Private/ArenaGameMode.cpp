@@ -192,10 +192,35 @@ void AArenaGameMode::OnPlayerKilled(AController* Killer, AController* Victim, EA
 		GS->MulticastKill(bSuicide ? FString() : KillerPS->GetPlayerName(), VictimPS ? VictimPS->GetPlayerName() : FString(TEXT("?")), Weapon);
 	}
 
+	SendFragMessages(Killer, Victim, KillerPS, VictimPS);
+
 	if (!bSuicide && FragLimit > 0 && KillerPS->Frags >= FragLimit)
 	{
 		FinishMatch(KillerPS);
 	}
+}
+
+void AArenaGameMode::SendFragMessages(AController* Killer, AController* Victim, AArenaPlayerState* KillerPS, AArenaPlayerState* VictimPS)
+{
+	const bool bSuicide = !KillerPS || KillerPS == VictimPS;
+	if (AArenaPlayerController* VictimPC = Cast<AArenaPlayerController>(Victim))
+	{
+		VictimPC->ClientFragMessage(bSuicide ? FString(TEXT("You killed yourself")) : FString::Printf(TEXT("Fragged by %s"), *KillerPS->GetPlayerName()), false);
+	}
+	AArenaPlayerController* KillerPC = Cast<AArenaPlayerController>(Killer);
+	const AArenaGameState* GS = GetGameState<AArenaGameState>();
+	if (bSuicide || !KillerPC || !GS)
+	{
+		return;
+	}
+
+	// Quake 3: "You fragged X" and "2nd place with 7".
+	const TArray<AArenaPlayerState*> Sorted = GS->GetSortedPlayers();
+	const int32 Place = Sorted.IndexOfByKey(KillerPS) + 1;
+	const bool bTied = Sorted.ContainsByPredicate([KillerPS](const AArenaPlayerState* Other) { return Other != KillerPS && Other->Frags == KillerPS->Frags; });
+	const TCHAR* Suffix = (Place % 100 >= 11 && Place % 100 <= 13) ? TEXT("th") : Place % 10 == 1 ? TEXT("st") : Place % 10 == 2 ? TEXT("nd") : Place % 10 == 3 ? TEXT("rd") : TEXT("th");
+	KillerPC->ClientFragMessage(FString::Printf(TEXT("You fragged %s\n%s%d%s place with %d"),
+		*VictimPS->GetPlayerName(), bTied ? TEXT("Tied for ") : TEXT(""), Place, Suffix, KillerPS->Frags), true);
 }
 
 void AArenaGameMode::FinishMatch(AArenaPlayerState* Winner)

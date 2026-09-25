@@ -38,8 +38,11 @@ public:
 	int32 GetAmmo(EArenaWeapon Weapon) const { return Ammo.IsValidIndex((int32)Weapon) ? Ammo[(int32)Weapon] : 0; }
 	bool HasWeapon(EArenaWeapon Weapon) const { return (OwnedWeapons & (1 << (int32)Weapon)) != 0; }
 
-	/** Server: applies damage with Quake-style armor absorption and knockback. */
-	void ApplyArenaDamage(float Damage, AController* InstigatorController, const FVector& Knockback, EArenaWeapon Weapon);
+	/**
+	 * Server: applies damage with Quake-style armor absorption and knockback.
+	 * SourceLocation (shooter or explosion) drives the victim's damage direction indicator.
+	 */
+	void ApplyArenaDamage(float Damage, AController* InstigatorController, const FVector& Knockback, EArenaWeapon Weapon, const FVector& SourceLocation);
 
 	/** Server: pickup helpers. Return false if the pickup would be wasted. */
 	bool GiveHealth(int32 Amount, int32 Cap);
@@ -95,6 +98,11 @@ protected:
 	void OnRep_Dead();
 
 	UFUNCTION()
+	void OnRep_Health(int32 OldHealth);
+
+	void UpdateMovementSounds(float DeltaSeconds);
+
+	UFUNCTION()
 	void OnRep_CurrentWeapon();
 
 	UPROPERTY(VisibleAnywhere)
@@ -114,7 +122,7 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> ViewGunMesh;
 
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_Health)
 	int32 Health = SpawnHealth;
 
 	UPROPERTY(Replicated)
@@ -139,4 +147,10 @@ private:
 	float TickDownAccumulator = 0.f;
 	float ViewKick = 0.f;
 	bool bJumpHeld = false;
+
+	// Cosmetic movement-sound state, tracked on every machine.
+	bool bWasOnGround = true;
+	float LastVelocityZ = 0.f;
+	float FootstepTimer = 0.f;
+	float LastPainTime = -100.f;
 };

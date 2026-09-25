@@ -62,6 +62,18 @@ public:
 	/** Server time the pawn died, for the respawn delay. */
 	float DeathTime = -1.f;
 
+	/** Server -> shooter: you hit someone (hit sound, marker, damage number). */
+	UFUNCTION(Client, Unreliable)
+	void ClientHitConfirmed(FVector_NetQuantize VictimLocation, int32 Damage, bool bKilled);
+
+	/** Server -> victim: you took damage from SourceLocation (flash, direction indicator). */
+	UFUNCTION(Client, Unreliable)
+	void ClientTookDamage(FVector_NetQuantize SourceLocation, int32 Damage);
+
+	/** Server -> killer or victim: centered frag message. bGood plays the frag sound. */
+	UFUNCTION(Client, Reliable)
+	void ClientFragMessage(const FString& Text, bool bGood);
+
 protected:
 	virtual void BeginPlay() override;
 

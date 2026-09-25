@@ -1,4 +1,5 @@
-#include "ArenaPickup.h"
+﻿#include "ArenaPickup.h"
+#include "ArenaAudio.h"
 #include "ArenaCharacter.h"
 #include "ArenaVisuals.h"
 #include "Components/SphereComponent.h"
@@ -72,6 +73,13 @@ void AArenaPickup::OnRep_Type()
 void AArenaPickup::OnRep_Available()
 {
 	Mesh->SetVisibility(bAvailable);
+
+	// Skip the initial replication when joining a game with items already taken.
+	if (!bAvailable && GetGameTimeSinceCreation() > 1.f)
+	{
+		const bool bWeapon = Type == EArenaPickupType::RocketLauncher || Type == EArenaPickupType::Railgun;
+		UArenaAudio::PlayAt(this, bWeapon ? EArenaSound::WeaponPickup : EArenaSound::Pickup, GetActorLocation());
+	}
 }
 
 void AArenaPickup::Tick(float DeltaSeconds)

@@ -1,6 +1,8 @@
 #include "ArenaPlayerController.h"
 #include "ArenaGameMode.h"
+#include "ArenaAudio.h"
 #include "ArenaGameState.h"
+#include "ArenaHUD.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -163,5 +165,36 @@ void AArenaPlayerController::ServerSetAirAccel_Implementation(float Value)
 	if (AArenaGameState* GS = GetWorld()->GetGameState<AArenaGameState>())
 	{
 		GS->AirAccelerate = FMath::Clamp(Value, 0.f, 1000.f);
+	}
+}
+
+void AArenaPlayerController::ClientHitConfirmed_Implementation(FVector_NetQuantize VictimLocation, int32 Damage, bool bKilled)
+{
+	// Quake 3 hitsound: higher pitch for light hits, lower for heavy ones.
+	const float Pitch = FMath::GetMappedRangeValueClamped(FVector2D(10.f, 100.f), FVector2D(1.25f, 0.8f), static_cast<float>(Damage));
+	UArenaAudio::Play2D(this, EArenaSound::Hit, 0.8f, Pitch);
+	if (AArenaHUD* ArenaHUD = GetHUD<AArenaHUD>())
+	{
+		ArenaHUD->OnHitConfirmed(VictimLocation, Damage, bKilled);
+	}
+}
+
+void AArenaPlayerController::ClientTookDamage_Implementation(FVector_NetQuantize SourceLocation, int32 Damage)
+{
+	if (AArenaHUD* ArenaHUD = GetHUD<AArenaHUD>())
+	{
+		ArenaHUD->OnDamaged(SourceLocation, Damage);
+	}
+}
+
+void AArenaPlayerController::ClientFragMessage_Implementation(const FString& Text, bool bGood)
+{
+	if (bGood)
+	{
+		UArenaAudio::Play2D(this, EArenaSound::Kill);
+	}
+	if (AArenaHUD* ArenaHUD = GetHUD<AArenaHUD>())
+	{
+		ArenaHUD->ShowCenterMessage(Text, bGood ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor(1.f, 0.3f, 0.25f));
 	}
 }

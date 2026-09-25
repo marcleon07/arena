@@ -50,6 +50,7 @@ protected:
 	virtual void HandleMatchHasEnded() override;
 
 	void FinishMatch(AArenaPlayerState* Winner);
+	void SendFragMessages(AController* Killer, AController* Victim, AArenaPlayerState* KillerPS, AArenaPlayerState* VictimPS);
 	void SpawnPickups();
 	void EnsureSpawnPoints();
 
