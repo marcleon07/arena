@@ -28,8 +28,15 @@ Game** in the editor) opens the **main menu** over a slow camera orbit of the ar
 
 - **Host Game**: pick a frag limit and time limit, then start a listen server that friends can join.
 - **Join Game**: enter an IP (or `IP:port`). The last address is remembered.
-- **Settings**: player name, mouse sensitivity, field of view, volume, auto-hop and
-  fullscreen. They're saved to `Saved/Config/Windows/GameUserSettings.ini`.
+- **Settings** has two tabs:
+  - **General**: player name, mouse sensitivity, invert mouse, field of view, volume,
+    auto-hop, fullscreen, VSync, frame-rate limit and an FPS counter.
+  - **Controls**: every action has two key slots. Click one, then press a key, a
+    mouse button or scroll the wheel. Esc cancels, Backspace clears the slot, and a
+    key you reuse is taken off whatever it was bound to before. **Reset to defaults**
+    restores the keys below.
+
+  Everything is saved to `Saved/Config/Windows/GameUserSettings.ini`.
 
 In a match, **Esc** (or **F10**) opens the pause menu: Resume, Settings, Leave Match and
 Quit. The match keeps running while it's open. In Play-In-Editor, Esc stops the
@@ -55,15 +62,19 @@ console: `open /Engine/Maps/Entry?listen?FragLimit=30?TimeLimit=15`.
 
 ## Controls
 
+Defaults; all of them except the menu and console keys can be changed in
+**Settings → Controls**.
+
 | Key | Action |
 | --- | --- |
-| WASD | Move |
+| WASD / arrows | Move |
 | Space | Jump (hold to auto-hop) |
-| Mouse wheel | Jump (HL1-style scroll bhop) |
+| Mouse wheel down | Jump (HL1-style scroll bhop) |
 | Ctrl / C | Crouch |
 | Left mouse | Fire, or respawn when dead |
-| 1 / 2 / 3 | Machinegun / Rocket Launcher / Railgun |
-| E / Q | Next weapon / last weapon |
+| 1 – 8 | Gauntlet, Machinegun, Shotgun, Grenade Launcher, Rocket Launcher, Lightning Gun, Railgun, Plasma Gun |
+| E / mouse wheel up | Next weapon (skips empty ones) |
+| Q | Last weapon |
 | Tab | Scoreboard |
 | Esc / F10 | Menu |
 | ` | Console |
@@ -103,11 +114,19 @@ green once you pass running speed.
 
 ## Weapons and items (Quake 3 values)
 
-| | Damage | Refire | Notes |
-| --- | --- | --- | --- |
-| Machinegun | 7 | 0.1 s | Hitscan, slight spread, start weapon |
-| Rocket Launcher | 100 + 100 splash | 0.8 s | 900 u/s, 120-unit splash, full knockback on self and half damage, so rocket jumps work |
-| Railgun | 100 | 1.5 s | Hitscan, passes through up to 4 players |
+| Key | Weapon | Damage | Refire | Notes |
+| --- | --- | --- | --- | --- |
+| 1 | Gauntlet | 50 | 0.4 s | Melee (64 units), no ammo, always carried |
+| 2 | Machinegun | 7 | 0.1 s | Hitscan, slight spread, start weapon |
+| 3 | Shotgun | 11 × 10 | 1.0 s | Hitscan pellets; hits are summed into one hit per player |
+| 4 | Grenade Launcher | 100 + 100 splash | 0.8 s | 700 u/s lob, bounces, 2.5 s fuse, explodes on touching a player |
+| 5 | Rocket Launcher | 100 + 100 splash | 0.8 s | 900 u/s, 120-unit splash; full self-knockback at half damage, so rocket jumps work |
+| 6 | Lightning Gun | 8 | 0.05 s | Continuous beam, 768-unit range |
+| 7 | Railgun | 100 | 1.5 s | Hitscan, passes through up to 4 players |
+| 8 | Plasma Gun | 20 + 15 splash | 0.1 s | 2000 u/s bolts with a 20-unit splash, enough to plasma-climb walls |
+
+Spread weapons use a random seed that the shooter sends with each shot, so the tracers
+you see locally match the server's pellets. Weapons respawn 5 s after pickup.
 
 Health (+25), Mega Health (+100, max 200), Armor (+50), Heavy Armor (+100), and
 ammo boxes all respawn on Quake 3 timers. Armor absorbs 66% of damage. Health and
@@ -140,16 +159,18 @@ sound is skipped with a log warning.
 | File | Role |
 | --- | --- |
 | `ArenaMovementComponent` | GoldSrc movement (the core of the bhop feel) |
-| `ArenaCharacter` | Input, weapons, damage/armor, knockback, death |
-| `ArenaPlayerController` | Input actions built in code, console commands, respawn requests |
+| `ArenaTypes` | Weapon table (damage, refire, ammo, spread, range), sounds, pickups |
+| `ArenaCharacter` | Input, firing, damage/armor, knockback, death |
+| `ArenaPlayerController` | Input actions and key bindings, menus, settings, respawn requests |
 | `ArenaGameMode` | FFA deathmatch rules, spawn selection, frag/time limits |
 | `ArenaGameState` | Replicated match state, `sv_airaccelerate`, effect multicasts, kill feed |
 | `ArenaMap` | The generated level (geometry, jump pads, lighting) and spawn/item layout |
-| `ArenaRocket`, `ArenaPickup` | Projectile and items |
+| `ArenaProjectile` | Rocket, grenade and plasma projectiles (direct + splash damage) |
+| `ArenaPickup` | Health, armor, weapon and ammo items |
 | `ArenaHUD` | Canvas HUD, scoreboard, hit markers, damage numbers and indicators |
 | `ArenaAudio` | Loads `/Game/Audio` and plays 2D and positional sounds |
 | `SArenaMenu` | Slate main and pause menu (no widget assets) |
-| `ArenaSettings` | Per-user preferences saved to `GameUserSettings.ini` |
+| `ArenaSettings` | Per-user preferences and key bindings saved to `GameUserSettings.ini` |
 
 ## Known limitations
 

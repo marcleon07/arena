@@ -7,6 +7,7 @@
 class AArenaPlayerController;
 class SEditableTextBox;
 class SWidgetSwitcher;
+struct FArenaBindableAction;
 
 /**
  * Main menu (standalone, before joining a game) and pause menu (in a match).
@@ -37,13 +38,30 @@ private:
 		Settings,
 	};
 
+	enum class ESettingsTab : int32
+	{
+		General,
+		Controls,
+	};
+
 	void ShowPage(EPage Page);
 	void SaveSettings();
+
+	// Key rebinding: a modal overlay grabs the next key, mouse button or wheel tick.
+	void BeginCapture(FName Action, int32 Slot);
+	void OnKeyCaptured(const FKey& Key);
+	void EndCapture();
+	bool IsCapturing() const { return !CaptureAction.IsNone(); }
 
 	TSharedRef<SWidget> MakeMainPage();
 	TSharedRef<SWidget> MakeHostPage();
 	TSharedRef<SWidget> MakeJoinPage();
 	TSharedRef<SWidget> MakeSettingsPage();
+	TSharedRef<SWidget> MakeGeneralSettings();
+	TSharedRef<SWidget> MakeControlsSettings();
+	TSharedRef<SWidget> MakeBindingRow(const FArenaBindableAction& Action);
+	TSharedRef<SWidget> MakeTabButton(const FText& Label, ESettingsTab Tab);
+	TSharedRef<SWidget> MakeCaptureOverlay();
 
 	TSharedRef<SWidget> MakeHeading(const FText& Text);
 	TSharedRef<SWidget> MakeButton(const FText& Label, FOnClicked OnClicked, bool bPrimary = false);
@@ -55,6 +73,11 @@ private:
 	TWeakObjectPtr<AArenaPlayerController> Owner;
 	bool bInGame = false;
 	EPage CurrentPage = EPage::Main;
+	ESettingsTab SettingsTab = ESettingsTab::General;
+
+	FName CaptureAction;
+	int32 CaptureSlot = 0;
+	TSharedPtr<SWidget> CaptureWidget;
 
 	TSharedPtr<SWidgetSwitcher> Switcher;
 	TSharedPtr<SEditableTextBox> NameBox;
@@ -63,4 +86,5 @@ private:
 	// Slate keeps pointers to styles, so they live as long as the widget.
 	FButtonStyle ButtonStyle;
 	FButtonStyle PrimaryButtonStyle;
+	FButtonStyle KeyButtonStyle;
 };

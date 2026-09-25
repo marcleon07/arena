@@ -8,6 +8,7 @@
 class UCameraComponent;
 class UStaticMeshComponent;
 class UArenaMovementComponent;
+struct FInputActionInstance;
 struct FInputActionValue;
 
 UCLASS()
@@ -72,21 +73,20 @@ protected:
 	void OnCrouchStarted();
 	void OnCrouchReleased();
 	void OnFireHeld();
-	void OnWeapon1() { SelectWeapon(EArenaWeapon::MachineGun); }
-	void OnWeapon2() { SelectWeapon(EArenaWeapon::RocketLauncher); }
-	void OnWeapon3() { SelectWeapon(EArenaWeapon::Railgun); }
+	void OnSelectWeaponAction(const FInputActionInstance& Instance);
 	void OnNextWeapon();
 	void OnLastWeapon();
 
 	void TryFire();
 	void SelectWeapon(EArenaWeapon Weapon);
-	void FireHitscan(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon);
-	void FireRocket(const FVector& Origin, const FVector& Dir);
+	bool CanFire(EArenaWeapon Weapon) const;
+	void FireHitscan(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon, int32 Seed);
+	void FireProjectile(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon);
 	void Die(AController* Killer, EArenaWeapon Weapon);
 	void UpdateWeaponVisuals();
 
 	UFUNCTION(Server, Reliable)
-	void ServerFire(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Dir);
+	void ServerFire(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Dir, int32 Seed);
 
 	UFUNCTION(Server, Reliable)
 	void ServerSelectWeapon(EArenaWeapon Weapon);

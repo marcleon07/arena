@@ -63,14 +63,28 @@ void AArenaPlayerController::BuildInput()
 	LastWeaponAction  = MakeAction(this, TEXT("IA_LastWeapon"), EInputActionValueType::Boolean);
 	ScoreboardAction  = MakeAction(this, TEXT("IA_Scoreboard"), EInputActionValueType::Boolean);
 	MenuAction        = MakeAction(this, TEXT("IA_Menu"), EInputActionValueType::Boolean);
-	WeaponActions = {
-		MakeAction(this, TEXT("IA_Weapon1"), EInputActionValueType::Boolean),
-		MakeAction(this, TEXT("IA_Weapon2"), EInputActionValueType::Boolean),
-		MakeAction(this, TEXT("IA_Weapon3"), EInputActionValueType::Boolean),
-	};
+	for (int32 i = 0; i < ArenaWeaponCount; ++i)
+	{
+		WeaponActions.Add(MakeAction(this, *FString::Printf(TEXT("IA_Weapon%d"), i + 1), EInputActionValueType::Boolean));
+	}
+
+	ApplyKeyBindings();
+}
+
+void AArenaPlayerController::ApplyKeyBindings()
+{
+	if (!MappingContext)
+	{
+		return;
+	}
+	MappingContext->UnmapAll();
 
 	auto Map = [this](UInputAction* Action, const FKey& Key, bool bNegate = false)
 	{
+		if (!Action || !Key.IsValid())
+		{
+			return;
+		}
 		FEnhancedActionKeyMapping& Mapping = MappingContext->MapKey(Action, Key);
 		if (bNegate)
 		{
@@ -78,27 +92,55 @@ void AArenaPlayerController::BuildInput()
 		}
 	};
 
-	Map(MoveForwardAction, EKeys::W);
-	Map(MoveForwardAction, EKeys::S, true);
-	Map(MoveRightAction, EKeys::D);
-	Map(MoveRightAction, EKeys::A, true);
+	// Fixed: mouse look and the menu. Esc ends Play-In-Editor sessions, so F10 opens the menu too.
 	Map(LookAction, EKeys::Mouse2D);
-	Map(JumpAction, EKeys::SpaceBar);
-	// HL1 bhoppers bind jump to the scroll wheel.
-	Map(JumpWheelAction, EKeys::MouseScrollDown);
-	Map(JumpWheelAction, EKeys::MouseScrollUp);
-	Map(CrouchAction, EKeys::LeftControl);
-	Map(CrouchAction, EKeys::C);
-	Map(FireAction, EKeys::LeftMouseButton);
-	Map(NextWeaponAction, EKeys::E);
-	Map(LastWeaponAction, EKeys::Q);
-	Map(ScoreboardAction, EKeys::Tab);
-	// Esc ends Play-In-Editor sessions, so F10 also opens the menu there.
 	Map(MenuAction, EKeys::Escape);
 	Map(MenuAction, EKeys::F10);
-	Map(WeaponActions[0], EKeys::One);
-	Map(WeaponActions[1], EKeys::Two);
-	Map(WeaponActions[2], EKeys::Three);
+
+	// Rebindable actions from the user's settings.
+	const UArenaSettings* Settings = UArenaSettings::Get();
+	for (const FArenaBindableAction& Def : UArenaSettings::GetBindableActions())
+	{
+		const FArenaKeyBinding Binding = Settings->GetBinding(Def.Id);
+		for (int32 Slot = 0; Slot < 2; ++Slot)
+		{
+			const FKey& Key = Binding.GetKey(Slot);
+			const FString Id = Def.Id.ToString();
+			if (Id == TEXT("MoveForward"))     { Map(MoveForwardAction, Key); }
+			else if (Id == TEXT("MoveBack"))   { Map(MoveForwardAction, Key, true); }
+			else if (Id == TEXT("MoveLeft"))   { Map(MoveRightAction, Key, true); }
+			else if (Id == TEXT("MoveRight"))  { Map(MoveRightAction, Key); }
+			else if (Id == TEXT("Jump"))
+			{
+				// Wheel "presses" have no release, so they use a jump action that never calls StopJumping.
+				const bool bWheel = Key == EKeys::MouseScrollUp || Key == EKeys::MouseScrollDown;
+				Map(bWheel ? JumpWheelAction : JumpAction, Key);
+			}
+			else if (Id == TEXT("Crouch"))     { Map(CrouchAction, Key); }
+			else if (Id == TEXT("Fire"))       { Map(FireAction, Key); }
+			else if (Id == TEXT("NextWeapon")) { Map(NextWeaponAction, Key); }
+			else if (Id == TEXT("LastWeapon")) { Map(LastWeaponAction, Key); }
+			else if (Id == TEXT("Scoreboard")) { Map(ScoreboardAction, Key); }
+			else if (Id.StartsWith(TEXT("Weapon")))
+			{
+				const int32 Index = FCString::Atoi(*Id.RightChop(6)) - 1;
+				if (WeaponActions.IsValidIndex(Index))
+				{
+					Map(WeaponActions[Index], Key);
+				}
+			}
+		}
+	}
+
+	// Re-adding the context makes Enhanced Input rebuild its key mappings.
+	if (ULocalPlayer* LP = GetLocalPlayer())
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+		{
+			Subsystem->RemoveMappingContext(MappingContext);
+			Subsystem->AddMappingContext(MappingContext, 0);
+		}
+	}
 }
 
 void AArenaPlayerController::BeginPlay()
@@ -258,13 +300,17 @@ void AArenaPlayerController::ApplyUserSettings(bool bIncludeDisplay)
 	{
 		UGameUserSettings* UserSettings = GEngine->GetGameUserSettings();
 		const EWindowMode::Type Mode = Settings->bFullscreen ? EWindowMode::WindowedFullscreen : EWindowMode::Windowed;
-		if (UserSettings && UserSettings->GetFullscreenMode() != Mode)
+		if (UserSettings && (UserSettings->GetFullscreenMode() != Mode
+			|| UserSettings->IsVSyncEnabled() != Settings->bVSync
+			|| !FMath::IsNearlyEqual(UserSettings->GetFrameRateLimit(), Settings->FrameRateLimit)))
 		{
 			UserSettings->SetFullscreenMode(Mode);
 			if (Settings->bFullscreen)
 			{
 				UserSettings->SetScreenResolution(UserSettings->GetDesktopResolution());
 			}
+			UserSettings->SetVSyncEnabled(Settings->bVSync);
+			UserSettings->SetFrameRateLimit(Settings->FrameRateLimit);
 			UserSettings->ApplySettings(false);
 		}
 	}

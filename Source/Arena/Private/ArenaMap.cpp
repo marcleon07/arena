@@ -200,6 +200,16 @@ const TArray<FArenaPickupSpot>& ArenaMap::GetPickupSpots()
 		Result.Add({ EArenaPickupType::Railgun, FVector(-2300.f, 0.f, TowerTop + Hover) });
 		Result.Add({ EArenaPickupType::RocketLauncher, FVector(0.f, 2200.f, Hover) });
 		Result.Add({ EArenaPickupType::RocketLauncher, FVector(0.f, -2200.f, Hover) });
+		// Floor between the jump pads and the side walls.
+		Result.Add({ EArenaPickupType::Shotgun, FVector(2000.f, -1000.f, Hover) });
+		Result.Add({ EArenaPickupType::Shotgun, FVector(-2000.f, 1000.f, Hover) });
+		Result.Add({ EArenaPickupType::GrenadeLauncher, FVector(2000.f, 1000.f, Hover) });
+		Result.Add({ EArenaPickupType::GrenadeLauncher, FVector(-2000.f, -1000.f, Hover) });
+		// Up on the bridge ring, either side of the armors.
+		Result.Add({ EArenaPickupType::LightningGun, FVector(-1200.f, 2300.f, TowerTop + Hover) });
+		Result.Add({ EArenaPickupType::LightningGun, FVector(1200.f, -2300.f, TowerTop + Hover) });
+		Result.Add({ EArenaPickupType::PlasmaGun, FVector(1200.f, 2300.f, TowerTop + Hover) });
+		Result.Add({ EArenaPickupType::PlasmaGun, FVector(-1200.f, -2300.f, TowerTop + Hover) });
 		for (const float X : { -1.f, 1.f })
 		{
 			for (const float Y : { -1.f, 1.f })

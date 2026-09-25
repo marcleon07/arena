@@ -57,27 +57,24 @@ TArray<AArenaPlayerState*> AArenaGameState::GetSortedPlayers() const
 	return Result;
 }
 
-void AArenaGameState::SpawnShotVisual(UWorld* World, const AArenaCharacter* Shooter, EArenaWeapon Weapon, const FVector& End)
+void AArenaGameState::SpawnShotVisual(UWorld* World, const AArenaCharacter* Shooter, EArenaWeapon Weapon, const TArray<FVector_NetQuantize>& Ends)
 {
-	if (!Shooter)
+	const FArenaWeaponInfo& Info = GetWeaponInfo(Weapon);
+	if (!Shooter || Info.TracerWidth <= 0.f)
 	{
 		return;
 	}
 	const FVector Start = Shooter->GetMuzzleLocation();
-	const FLinearColor Color = GetWeaponInfo(Weapon).Color;
-	if (Weapon == EArenaWeapon::Railgun)
+	// Impact puff scales with the tracer: big for the rail, tiny for pellets.
+	const float BlastRadius = FMath::Clamp(Info.TracerWidth * 5.f, 6.f, 25.f);
+	for (const FVector_NetQuantize& End : Ends)
 	{
-		ArenaVisuals::SpawnBeam(World, Start, End, Color, 5.f, 0.9f);
-		ArenaVisuals::SpawnBlast(World, End, Color, 25.f, 0.3f);
-	}
-	else
-	{
-		ArenaVisuals::SpawnBeam(World, Start, End, Color, 1.2f, 0.07f);
-		ArenaVisuals::SpawnBlast(World, End, Color, 8.f, 0.15f);
+		ArenaVisuals::SpawnBeam(World, Start, End, Info.Color, Info.TracerWidth, Info.TracerLife);
+		ArenaVisuals::SpawnBlast(World, End, Info.Color, BlastRadius, FMath::Min(Info.TracerLife * 2.f, 0.3f));
 	}
 }
 
-void AArenaGameState::MulticastShot_Implementation(AArenaCharacter* Shooter, EArenaWeapon Weapon, FVector_NetQuantize End)
+void AArenaGameState::MulticastShot_Implementation(AArenaCharacter* Shooter, EArenaWeapon Weapon, const TArray<FVector_NetQuantize>& Ends)
 {
 	if (!Shooter)
 	{
@@ -87,11 +84,11 @@ void AArenaGameState::MulticastShot_Implementation(AArenaCharacter* Shooter, EAr
 	// already drew its own predicted tracer.
 	if (!Shooter->IsLocallyControlled())
 	{
-		UArenaAudio::PlayAt(this, GetFireSound(Weapon), Shooter->GetMuzzleLocation(), 1.f, FMath::FRandRange(0.97f, 1.03f));
+		UArenaAudio::PlayAt(this, GetWeaponInfo(Weapon).FireSound, Shooter->GetMuzzleLocation(), 1.f, FMath::FRandRange(0.97f, 1.03f));
 	}
 	if (!(Shooter->IsLocallyControlled() && !Shooter->HasAuthority()))
 	{
-		SpawnShotVisual(GetWorld(), Shooter, Weapon, End);
+		SpawnShotVisual(GetWorld(), Shooter, Weapon, Ends);
 	}
 }
 

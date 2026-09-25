@@ -56,6 +56,7 @@ private:
 	float Now() const;
 
 	float UIScale = 1.f;
+	float SmoothedFPS = 0.f;
 
 	TArray<FHitNumber> HitNumbers;
 	float LastHitTime = -100.f;
