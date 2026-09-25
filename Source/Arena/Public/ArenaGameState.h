@@ -39,6 +39,9 @@ public:
 	UPROPERTY(Replicated)
 	FString WinnerName;
 
+	/** True for a standalone world: the main menu, before hosting or joining. */
+	static bool IsMenuWorld(const UWorld* World);
+
 	/** Seconds left in the match, or 0. */
 	float GetTimeRemaining() const;
 

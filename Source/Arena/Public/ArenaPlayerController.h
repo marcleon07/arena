@@ -5,14 +5,20 @@
 #include "ArenaTypes.h"
 #include "ArenaPlayerController.generated.h"
 
+class ACameraActor;
+class SArenaMenu;
+class SWidget;
 class UInputAction;
 class UInputMappingContext;
 
 /**
  * Owns the input actions and mapping context (built in code, no assets needed),
- * client-side preferences (autohop, sensitivity) and the respawn flow.
+ * the menus, applying user settings, and the respawn flow.
+ *
+ * A standalone world (not hosting or connected) is the main menu: no pawn,
+ * an orbiting camera over the arena, and the menu open.
  */
-UCLASS(Config = Game)
+UCLASS()
 class ARENA_API AArenaPlayerController : public APlayerController
 {
 	GENERATED_BODY()
@@ -23,16 +29,22 @@ public:
 	virtual void PostInitializeComponents() override;
 	virtual void SetupInputComponent() override;
 	virtual void OnUnPossess() override;
-
-	/** Holding jump re-jumps on landing. Turn off for scroll-wheel HL1 purism. */
-	UPROPERTY(Config)
-	bool bAutoHop = true;
-
-	/** Quake-style sensitivity: degrees per mouse count = 0.022 * Sensitivity. */
-	UPROPERTY(Config)
-	float Sensitivity = 2.5f;
+	virtual void PlayerTick(float DeltaTime) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	bool IsScoreboardHeld() const { return bScoreboardHeld; }
+
+	// Menu
+	bool IsMenuOpen() const { return MenuWidget.IsValid(); }
+	void OpenMenu();
+	void CloseMenu();
+	void HostGame();
+	void JoinGame(const FString& Address);
+	void Disconnect();
+	void QuitToDesktop();
+
+	/** Applies FOV, volume, name (and window mode if bIncludeDisplay) from UArenaSettings. */
+	void ApplyUserSettings(bool bIncludeDisplay);
 
 	// Console commands
 	UFUNCTION(Exec)
@@ -57,6 +69,7 @@ public:
 	UPROPERTY(Transient) TObjectPtr<UInputAction> NextWeaponAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> LastWeaponAction;
 	UPROPERTY(Transient) TObjectPtr<UInputAction> ScoreboardAction;
+	UPROPERTY(Transient) TObjectPtr<UInputAction> MenuAction;
 	UPROPERTY(Transient) TArray<TObjectPtr<UInputAction>> WeaponActions;
 
 	/** Server time the pawn died, for the respawn delay. */
@@ -88,6 +101,17 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetAirAccel(float Value);
 
+	void OnMenuPressed();
+	void UpdateMenuCamera(float DeltaTime);
+
 private:
 	bool bScoreboardHeld = false;
+
+	TSharedPtr<SArenaMenu> MenuWidget;
+	TSharedPtr<SWidget> MenuContainer;
+
+	UPROPERTY(Transient)
+	TObjectPtr<ACameraActor> MenuCamera;
+
+	float MenuCameraAngle = 0.f;
 };

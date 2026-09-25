@@ -30,6 +30,11 @@ void AArenaGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AArenaGameState, WinnerName);
 }
 
+bool AArenaGameState::IsMenuWorld(const UWorld* World)
+{
+	return World && World->GetNetMode() == NM_Standalone;
+}
+
 float AArenaGameState::GetTimeRemaining() const
 {
 	return FMath::Max(0.f, MatchEndTime - GetServerWorldTimeSeconds());

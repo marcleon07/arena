@@ -58,7 +58,8 @@ void AArenaGameMode::HandleMatchHasStarted()
 	{
 		GS->FragLimit = FragLimit;
 		GS->WinnerName.Reset();
-		GS->MatchEndTime = TimeLimitMinutes > 0.f ? GetWorld()->GetTimeSeconds() + TimeLimitMinutes * 60.f : 0.f;
+		const bool bTimed = TimeLimitMinutes > 0.f && !AArenaGameState::IsMenuWorld(GetWorld());
+		GS->MatchEndTime = bTimed ? GetWorld()->GetTimeSeconds() + TimeLimitMinutes * 60.f : 0.f;
 	}
 	Super::HandleMatchHasStarted();
 }
@@ -145,9 +146,15 @@ void AArenaGameMode::Tick(float DeltaSeconds)
 	}
 }
 
+bool AArenaGameMode::PlayerCanRestart_Implementation(APlayerController* Player)
+{
+	// The main menu world has no players in it, just the orbiting camera.
+	return !AArenaGameState::IsMenuWorld(GetWorld()) && Super::PlayerCanRestart_Implementation(Player);
+}
+
 void AArenaGameMode::TryRespawn(AArenaPlayerController* PC, bool bRequested)
 {
-	if (!PC || !IsMatchInProgress() || (PC->GetPawn() && !PC->GetPawn()->IsPendingKillPending()))
+	if (!PC || !IsMatchInProgress() || AArenaGameState::IsMenuWorld(GetWorld()) || (PC->GetPawn() && !PC->GetPawn()->IsPendingKillPending()))
 	{
 		return;
 	}
