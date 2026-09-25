@@ -21,6 +21,23 @@ which are synthesized by a script (see [Sounds](#sounds)).
 4. Open `Arena.uproject`. In the Play dropdown set *Number of Players* to 2+ and
    *Net Mode* to **Play As Listen Server** to test multiplayer in-editor.
 
+## Menus
+
+Launching the game normally (double-click a packaged build, or **Play → Standalone
+Game** in the editor) opens the **main menu** over a slow camera orbit of the arena:
+
+- **Host Game**: pick a frag limit and time limit, then start a listen server that friends can join.
+- **Join Game**: enter an IP (or `IP:port`). The last address is remembered.
+- **Settings**: player name, mouse sensitivity, field of view, volume, auto-hop and
+  fullscreen. They're saved to `Saved/Config/Windows/GameUserSettings.ini`.
+
+In a match, **Esc** (or **F10**) opens the pause menu: Resume, Settings, Leave Match and
+Quit. The match keeps running while it's open. In Play-In-Editor, Esc stops the
+session, so use F10 there.
+
+Playing in the editor as **Listen Server**, or running `Host.bat` / `Join.bat`, skips
+the main menu and drops you straight into a match.
+
 ## Play outside the editor
 
 The scripts in `Scripts/` find the engine under `C:\Program Files\Epic Games\UE_5.*`,
@@ -48,6 +65,7 @@ console: `open /Engine/Maps/Entry?listen?FragLimit=30?TimeLimit=15`.
 | 1 / 2 / 3 | Machinegun / Rocket Launcher / Railgun |
 | E / Q | Next weapon / last weapon |
 | Tab | Scoreboard |
+| Esc / F10 | Menu |
 | ` | Console |
 
 ### Console commands
@@ -58,7 +76,7 @@ console: `open /Engine/Maps/Entry?listen?FragLimit=30?TimeLimit=15`.
 | `sens 2.5` | Quake-style sensitivity (0.022° per mouse count × value) |
 | `fov 110` | Field of view |
 | `airaccel 100` | Sets the server's `sv_airaccelerate` (10 = HL1, 100 = CS 1.6 surf/bhop servers) |
-| `setname Frag` | Change your name |
+| `setname Frag` | Change your name for this match (set it permanently in Settings) |
 
 ## How the movement works
 
@@ -130,6 +148,8 @@ sound is skipped with a log warning.
 | `ArenaRocket`, `ArenaPickup` | Projectile and items |
 | `ArenaHUD` | Canvas HUD, scoreboard, hit markers, damage numbers and indicators |
 | `ArenaAudio` | Loads `/Game/Audio` and plays 2D and positional sounds |
+| `SArenaMenu` | Slate main and pause menu (no widget assets) |
+| `ArenaSettings` | Per-user preferences saved to `GameUserSettings.ini` |
 
 ## Known limitations
 

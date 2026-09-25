@@ -7,7 +7,7 @@ public class Arena : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
-			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "NetCore"
+			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "NetCore", "Slate", "SlateCore"
 		});
 	}
 }

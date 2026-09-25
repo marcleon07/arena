@@ -33,6 +33,11 @@ void AArenaHUD::DrawHUD()
 	}
 	UIScale = Canvas->ClipY / 1080.f;
 
+	if (AArenaGameState::IsMenuWorld(GetWorld()))
+	{
+		return;
+	}
+
 	const AArenaGameState* GS = GetWorld()->GetGameState<AArenaGameState>();
 	const AArenaPlayerController* PC = Cast<AArenaPlayerController>(GetOwningPlayerController());
 	const AArenaCharacter* Pawn = Cast<AArenaCharacter>(GetOwningPawn());

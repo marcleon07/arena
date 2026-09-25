@@ -1,6 +1,7 @@
 #include "ArenaCharacter.h"
 #include "Arena.h"
 #include "ArenaAudio.h"
+#include "ArenaSettings.h"
 #include "ArenaMovementComponent.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
@@ -173,6 +174,11 @@ void AArenaCharacter::Tick(float DeltaSeconds)
 
 	UpdateMovementSounds(DeltaSeconds);
 
+	if (IsLocallyControlled())
+	{
+		Camera->SetFieldOfView(UArenaSettings::Get()->FieldOfView);
+	}
+
 	// Health and armor above 100 count down one point per second (Quake 3).
 	if (HasAuthority() && !bDead)
 	{
@@ -281,8 +287,7 @@ void AArenaCharacter::OnMoveRight(const FInputActionValue& Value)
 
 void AArenaCharacter::OnLook(const FInputActionValue& Value)
 {
-	const AArenaPlayerController* PC = Cast<AArenaPlayerController>(GetController());
-	const float Scale = MouseYawPerCount * (PC ? PC->Sensitivity : 2.5f);
+	const float Scale = MouseYawPerCount * UArenaSettings::Get()->Sensitivity;
 	const FVector2D Delta = Value.Get<FVector2D>();
 	AddControllerYawInput(Delta.X * Scale);
 	AddControllerPitchInput(Delta.Y * Scale);
@@ -296,8 +301,7 @@ void AArenaCharacter::OnJumpStarted()
 
 void AArenaCharacter::OnJumpHeld()
 {
-	const AArenaPlayerController* PC = Cast<AArenaPlayerController>(GetController());
-	if (PC && PC->bAutoHop)
+	if (UArenaSettings::Get()->bAutoHop)
 	{
 		Jump();
 	}

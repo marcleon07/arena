@@ -26,6 +26,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 	virtual bool ShouldSpawnAtStartSpot(AController* Player) override { return false; }
+	virtual bool PlayerCanRestart_Implementation(APlayerController* Player) override;
 
 	void OnPlayerKilled(AController* Killer, AController* Victim, EArenaWeapon Weapon);
 
