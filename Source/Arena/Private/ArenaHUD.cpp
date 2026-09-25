@@ -4,6 +4,7 @@
 #include "ArenaMovementComponent.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
+#include "ArenaSettings.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -60,6 +61,12 @@ void AArenaHUD::DrawHUD()
 	}
 
 	DrawCenterMessage();
+
+	if (UArenaSettings::Get()->bShowFPS && RenderDelta > 0.f)
+	{
+		SmoothedFPS = SmoothedFPS <= 0.f ? 1.f / RenderDelta : FMath::Lerp(SmoothedFPS, 1.f / RenderDelta, 0.05f);
+		DrawText(FString::Printf(TEXT("%d fps"), FMath::RoundToInt(SmoothedFPS)), DimColor, Canvas->ClipX - 110.f * UIScale, 52.f * UIScale, GEngine->GetSmallFont(), UIScale);
+	}
 
 	if (GS)
 	{
@@ -300,7 +307,7 @@ void AArenaHUD::DrawStatus(const AArenaCharacter* Pawn)
 void AArenaHUD::DrawWeapons(const AArenaCharacter* Pawn)
 {
 	UFont* Font = GEngine->GetMediumFont();
-	const float SlotW = 170.f * UIScale;
+	const float SlotW = 112.f * UIScale;
 	const float SlotH = 36.f * UIScale;
 	float X = Canvas->ClipX - (SlotW + 8.f * UIScale) * ArenaWeaponCount - 30.f * UIScale;
 	const float Y = Canvas->ClipY - 70.f * UIScale;
@@ -313,7 +320,9 @@ void AArenaHUD::DrawWeapons(const AArenaCharacter* Pawn)
 		const bool bCurrent = Pawn->GetCurrentWeapon() == Weapon;
 
 		DrawRect(bCurrent ? FLinearColor(Info.Color.R, Info.Color.G, Info.Color.B, 0.45f) : Panel, X, Y, SlotW, SlotH);
-		const FString Label = FString::Printf(TEXT("%d %s  %d"), i + 1, Info.Name, bOwned ? Pawn->GetAmmo(Weapon) : 0);
+		const FString Label = Info.UsesAmmo()
+			? FString::Printf(TEXT("%d %s %d"), i + 1, Info.ShortName, bOwned ? Pawn->GetAmmo(Weapon) : 0)
+			: FString::Printf(TEXT("%d %s"), i + 1, Info.ShortName);
 		DrawText(Label, bOwned ? TextColor : DimColor * 0.6f, X + 8.f * UIScale, Y + 6.f * UIScale, Font, 0.9f * UIScale);
 		X += SlotW + 8.f * UIScale;
 	}

@@ -210,7 +210,57 @@ def no_ammo():
     return render(0.06, lambda t: noise() * env(t, 0.0003, 0.004) + o.sine(1500) * env(t, 0.0005, 0.008) * 0.6)
 
 
-# Name order must match EArenaSound in Source/Arena/Public/ArenaTypes.h.
+def shotgun_fire():
+    lp, thump = LowPass(), Osc()
+    return render(0.4, lambda t:
+                  lp(noise(), sweep(5000, 450, t, 0.25)) * env(t, 0.001, 0.06) * 1.8
+                  + thump.sine(sweep(120, 45, t, 0.15)) * env(t, 0.001, 0.07))
+
+
+def grenade_fire():
+    lp, o, click = LowPass(), Osc(), LowPass()
+    return render(0.25, lambda t:
+                  o.sine(sweep(230, 85, t, 0.12)) * env(t, 0.002, 0.04)
+                  + lp(noise(), 1200) * env(t, 0.001, 0.025) * 1.4
+                  + click(noise(), 6000) * env(t, 0.0005, 0.004) * 0.6)
+
+
+def grenade_bounce():
+    a, b, lp = Osc(), Osc(), LowPass()
+    return render(0.15, lambda t:
+                  (a.sine(900) + 0.6 * b.sine(1370)) * env(t, 0.001, 0.03)
+                  + lp(noise(), 3000) * env(t, 0.0005, 0.008))
+
+
+def lightning_fire():
+    # Short crackling hum; fired 20 times a second it blends into a continuous buzz.
+    o, lp, crackle = Osc(), LowPass(), LowPass()
+    return render(0.12, lambda t:
+                  (lp(o.saw(90), 3000) * 0.8
+                   + crackle(noise() if random.random() < 0.08 else 0.0, 7000) * 5.0)
+                  * env(t, 0.005, 0.08))
+
+
+def plasma_fire():
+    carrier, mod = Osc(), Osc()
+    return render(0.18, lambda t:
+                  carrier.sine(sweep(1800, 600, t, 0.12) * (1 + 0.3 * mod.sine(210))) * env(t, 0.001, 0.05))
+
+
+def plasma_explode():
+    lp, o = LowPass(), Osc()
+    return render(0.25, lambda t:
+                  lp(noise(), sweep(2500, 400, t, 0.2)) * env(t, 0.001, 0.05) * 1.5
+                  + o.sine(sweep(300, 120, t, 0.15)) * env(t, 0.001, 0.04))
+
+
+def gauntlet_fire():
+    o, lp = Osc(), LowPass()
+    return render(0.4, lambda t:
+                  lp(o.saw(70 * (1 + 0.5 * math.sin(2 * math.pi * 35 * t))), 2500) * env(t, 0.005, 0.15))
+
+
+# Names match EArenaSound in Source/Arena/Public/ArenaTypes.h.
 SOUNDS = {
     "Hit": hit,
     "Kill": kill,
@@ -228,6 +278,13 @@ SOUNDS = {
     "Death": death,
     "Spawn": spawn,
     "NoAmmo": no_ammo,
+    "ShotgunFire": shotgun_fire,
+    "GrenadeFire": grenade_fire,
+    "GrenadeBounce": grenade_bounce,
+    "LightningFire": lightning_fire,
+    "PlasmaFire": plasma_fire,
+    "PlasmaExplode": plasma_explode,
+    "GauntletFire": gauntlet_fire,
 }
 
 

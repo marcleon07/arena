@@ -50,11 +50,12 @@ public:
 
 	const TArray<FArenaKillFeedEntry>& GetKillFeed() const { return KillFeed; }
 
-	/** Draws the tracer / rail trail for a hitscan shot on this machine. */
-	static void SpawnShotVisual(UWorld* World, const AArenaCharacter* Shooter, EArenaWeapon Weapon, const FVector& End);
+	/** Draws tracers / rail trail / lightning beam for a hitscan shot on this machine. */
+	static void SpawnShotVisual(UWorld* World, const AArenaCharacter* Shooter, EArenaWeapon Weapon, const TArray<FVector_NetQuantize>& Ends);
 
+	/** One end point per pellet (shotgun) or one for single-trace weapons. */
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastShot(AArenaCharacter* Shooter, EArenaWeapon Weapon, FVector_NetQuantize End);
+	void MulticastShot(AArenaCharacter* Shooter, EArenaWeapon Weapon, const TArray<FVector_NetQuantize>& Ends);
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastExplosion(FVector_NetQuantize Location, FLinearColor Color, float Radius, EArenaSound Sound);

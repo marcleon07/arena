@@ -43,8 +43,11 @@ public:
 	void Disconnect();
 	void QuitToDesktop();
 
-	/** Applies FOV, volume, name (and window mode if bIncludeDisplay) from UArenaSettings. */
+	/** Applies volume and name (and window mode, vsync, frame limit if bIncludeDisplay) from UArenaSettings. */
 	void ApplyUserSettings(bool bIncludeDisplay);
+
+	/** Rebuilds the input mapping context from the user's key bindings. */
+	void ApplyKeyBindings();
 
 	// Console commands
 	UFUNCTION(Exec)

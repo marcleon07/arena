@@ -10,6 +10,7 @@
 #include "Widgets/Input/SSlider.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/SBoxPanel.h"
@@ -23,7 +24,8 @@ namespace
 	const FLinearColor Accent(0.95f, 0.45f, 0.08f);
 	const FLinearColor TextColor(0.93f, 0.93f, 0.93f);
 	const FLinearColor DimText(0.72f, 0.72f, 0.75f);
-	constexpr float ColumnWidth = 460.f;
+	constexpr float ColumnWidth = 520.f;
+	constexpr float SettingsHeight = 520.f;
 
 	FSlateFontInfo Font(const char* Weight, int32 Size)
 	{
@@ -42,6 +44,53 @@ namespace
 	}
 }
 
+DECLARE_DELEGATE_OneParam(FOnArenaKeyCaptured, const FKey&);
+
+/** Full-screen catcher for the next key, mouse button or wheel tick. */
+class SArenaKeyCapture : public SCompoundWidget
+{
+public:
+	SLATE_BEGIN_ARGS(SArenaKeyCapture) {}
+		SLATE_EVENT(FOnArenaKeyCaptured, OnKeyCaptured)
+		SLATE_DEFAULT_SLOT(FArguments, Content)
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs)
+	{
+		OnKeyCaptured = InArgs._OnKeyCaptured;
+		ChildSlot[InArgs._Content.Widget];
+	}
+
+	virtual bool SupportsKeyboardFocus() const override { return true; }
+
+	virtual FReply OnKeyDown(const FGeometry&, const FKeyEvent& InKeyEvent) override
+	{
+		OnKeyCaptured.ExecuteIfBound(InKeyEvent.GetKey());
+		return FReply::Handled();
+	}
+
+	virtual FReply OnMouseButtonDown(const FGeometry&, const FPointerEvent& MouseEvent) override
+	{
+		OnKeyCaptured.ExecuteIfBound(MouseEvent.GetEffectingButton());
+		return FReply::Handled();
+	}
+
+	virtual FReply OnMouseButtonDoubleClick(const FGeometry&, const FPointerEvent& MouseEvent) override
+	{
+		OnKeyCaptured.ExecuteIfBound(MouseEvent.GetEffectingButton());
+		return FReply::Handled();
+	}
+
+	virtual FReply OnMouseWheel(const FGeometry&, const FPointerEvent& MouseEvent) override
+	{
+		OnKeyCaptured.ExecuteIfBound(MouseEvent.GetWheelDelta() > 0.f ? EKeys::MouseScrollUp : EKeys::MouseScrollDown);
+		return FReply::Handled();
+	}
+
+private:
+	FOnArenaKeyCaptured OnKeyCaptured;
+};
+
 void SArenaMenu::Construct(const FArguments& InArgs)
 {
 	Owner = InArgs._Owner;
@@ -49,6 +98,7 @@ void SArenaMenu::Construct(const FArguments& InArgs)
 
 	ButtonStyle = MakeButtonStyle(FLinearColor(0.08f, 0.08f, 0.1f, 0.85f), FLinearColor(0.2f, 0.2f, 0.24f, 0.95f), FLinearColor(0.05f, 0.05f, 0.06f, 1.f));
 	PrimaryButtonStyle = MakeButtonStyle(Accent * 0.8f, Accent, Accent * 0.6f);
+	KeyButtonStyle = MakeButtonStyle(FLinearColor(0.16f, 0.16f, 0.2f, 0.95f), FLinearColor(0.3f, 0.3f, 0.36f, 1.f), Accent * 0.6f);
 
 	// Main menu shows the arena orbiting behind a light tint; in-game dims the match more.
 	const FLinearColor Backdrop = bInGame ? FLinearColor(0.f, 0.f, 0.f, 0.6f) : FLinearColor(0.f, 0.f, 0.02f, 0.35f);
@@ -118,6 +168,10 @@ void SArenaMenu::Construct(const FArguments& InArgs)
 			.Text(LOCTEXT("Hint", "Esc: back    ` : console"))
 			.Font(Font("Regular", 11))
 			.ColorAndOpacity(DimText)
+		]
+		+ SOverlay::Slot()
+		[
+			MakeCaptureOverlay()
 		]
 	];
 }
@@ -285,49 +339,100 @@ TSharedRef<SWidget> SArenaMenu::MakeJoinPage()
 
 TSharedRef<SWidget> SArenaMenu::MakeSettingsPage()
 {
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()[MakeHeading(LOCTEXT("SettingsHeading", "Settings"))]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 12.f)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(0.f, 0.f, 5.f, 0.f)[MakeTabButton(LOCTEXT("TabGeneral", "GENERAL"), ESettingsTab::General)]
+			+ SHorizontalBox::Slot().FillWidth(1.f).Padding(5.f, 0.f, 0.f, 0.f)[MakeTabButton(LOCTEXT("TabControls", "CONTROLS"), ESettingsTab::Controls)]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 14.f)
+		[
+			SNew(SBox)
+			.HeightOverride(SettingsHeight)
+			[
+				SNew(SWidgetSwitcher)
+				.WidgetIndex_Lambda([this] { return static_cast<int32>(SettingsTab); })
+				+ SWidgetSwitcher::Slot()[MakeGeneralSettings()]
+				+ SWidgetSwitcher::Slot()[MakeControlsSettings()]
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			MakeButton(LOCTEXT("Back", "BACK"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Main); return FReply::Handled(); }))
+		];
+}
+
+TSharedRef<SWidget> SArenaMenu::MakeTabButton(const FText& Label, ESettingsTab Tab)
+{
+	return SNew(SBox)
+		.HeightOverride(44.f)
+		[
+			SNew(SButton)
+			.ButtonStyle(&ButtonStyle)
+			.HAlign(HAlign_Center)
+			.VAlign(VAlign_Center)
+			.OnClicked_Lambda([this, Tab] { SettingsTab = Tab; return FReply::Handled(); })
+			[
+				SNew(STextBlock)
+				.Text(Label)
+				.Font(Font("Bold", 16))
+				.ColorAndOpacity_Lambda([this, Tab] { return FSlateColor(SettingsTab == Tab ? Accent : DimText); })
+			]
+		];
+}
+
+TSharedRef<SWidget> SArenaMenu::MakeGeneralSettings()
+{
 	UArenaSettings* Settings = UArenaSettings::Get();
 	TWeakObjectPtr<AArenaPlayerController> WeakOwner = Owner;
-	// Apply live so changes are felt immediately; saved when leaving the page.
+	// Volume and FOV apply live; display options apply when leaving the page.
 	auto Apply = [WeakOwner]
 	{
 		if (WeakOwner.IsValid()) { WeakOwner->ApplyUserSettings(false); }
 	};
 
-	return SNew(SVerticalBox)
-		+ SVerticalBox::Slot().AutoHeight()[MakeHeading(LOCTEXT("SettingsHeading", "Settings"))]
-		+ SVerticalBox::Slot().AutoHeight()[MakeLabel(LOCTEXT("Name", "Player name"))]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 14.f)
+	return SNew(SScrollBox)
+		+ SScrollBox::Slot()[MakeLabel(LOCTEXT("Name", "Player name"))]
+		+ SScrollBox::Slot().Padding(0.f, 6.f, 12.f, 14.f)
 		[
 			SAssignNew(NameBox, SEditableTextBox)
 			.Text(FText::FromString(Settings->PlayerName))
 			.HintText(LOCTEXT("NameHint", "PlayerN"))
 			.Font(Font("Regular", 16))
 		]
-		+ SVerticalBox::Slot().AutoHeight()
+		+ SScrollBox::Slot().Padding(0.f, 0.f, 12.f, 0.f)
 		[
 			MakeSliderRow(LOCTEXT("Sensitivity", "Mouse sensitivity"), 0.2f, 10.f, 0.05f, 2,
 				[Settings] { return Settings->Sensitivity; },
 				[Settings](float V) { Settings->Sensitivity = V; })
 		]
-		+ SVerticalBox::Slot().AutoHeight()
+		+ SScrollBox::Slot()
+		[
+			MakeCheckRow(LOCTEXT("Invert", "Invert mouse"),
+				[Settings] { return Settings->bInvertMouse; },
+				[Settings](bool b) { Settings->bInvertMouse = b; })
+		]
+		+ SScrollBox::Slot().Padding(0.f, 0.f, 12.f, 0.f)
 		[
 			MakeSliderRow(LOCTEXT("FOV", "Field of view"), 80.f, 130.f, 1.f, 0,
 				[Settings] { return Settings->FieldOfView; },
-				[Settings, Apply](float V) { Settings->FieldOfView = V; Apply(); })
+				[Settings](float V) { Settings->FieldOfView = V; })
 		]
-		+ SVerticalBox::Slot().AutoHeight()
+		+ SScrollBox::Slot().Padding(0.f, 0.f, 12.f, 0.f)
 		[
 			MakeSliderRow(LOCTEXT("Volume", "Volume"), 0.f, 100.f, 1.f, 0,
 				[Settings] { return Settings->MasterVolume * 100.f; },
 				[Settings, Apply](float V) { Settings->MasterVolume = V / 100.f; Apply(); })
 		]
-		+ SVerticalBox::Slot().AutoHeight()
+		+ SScrollBox::Slot()
 		[
 			MakeCheckRow(LOCTEXT("AutoHop", "Auto-hop (hold jump to bunnyhop)"),
 				[Settings] { return Settings->bAutoHop; },
 				[Settings](bool b) { Settings->bAutoHop = b; })
 		]
-		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 18.f)
+		+ SScrollBox::Slot()
 		[
 			MakeCheckRow(LOCTEXT("Fullscreen", "Fullscreen"),
 				[Settings] { return Settings->bFullscreen; },
@@ -337,10 +442,174 @@ TSharedRef<SWidget> SArenaMenu::MakeSettingsPage()
 					if (WeakOwner.IsValid()) { WeakOwner->ApplyUserSettings(true); }
 				})
 		]
-		+ SVerticalBox::Slot().AutoHeight()
+		+ SScrollBox::Slot()
 		[
-			MakeButton(LOCTEXT("Back", "BACK"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Main); return FReply::Handled(); }))
+			MakeCheckRow(LOCTEXT("VSync", "VSync"),
+				[Settings] { return Settings->bVSync; },
+				[Settings](bool b) { Settings->bVSync = b; })
+		]
+		+ SScrollBox::Slot().Padding(0.f, 0.f, 12.f, 0.f)
+		[
+			MakeSliderRow(LOCTEXT("FrameLimit", "Frame rate limit (0 = unlimited)"), 0.f, 360.f, 10.f, 0,
+				[Settings] { return Settings->FrameRateLimit; },
+				[Settings](float V) { Settings->FrameRateLimit = V; })
+		]
+		+ SScrollBox::Slot()
+		[
+			MakeCheckRow(LOCTEXT("ShowFPS", "Show FPS"),
+				[Settings] { return Settings->bShowFPS; },
+				[Settings](bool b) { Settings->bShowFPS = b; })
 		];
+}
+
+TSharedRef<SWidget> SArenaMenu::MakeControlsSettings()
+{
+	TSharedRef<SScrollBox> Rows = SNew(SScrollBox);
+	for (const FArenaBindableAction& Action : UArenaSettings::GetBindableActions())
+	{
+		Rows->AddSlot().Padding(0.f, 0.f, 12.f, 6.f)[MakeBindingRow(Action)];
+	}
+
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 12.f, 8.f)
+		[
+			SNew(STextBlock)
+			.Text(LOCTEXT("ControlsHint", "Click a key to change it, then press a key, mouse button or scroll the wheel."))
+			.Font(Font("Regular", 12))
+			.ColorAndOpacity(DimText)
+			.AutoWrapText(true)
+		]
+		+ SVerticalBox::Slot().FillHeight(1.f)[Rows]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 10.f, 0.f, 0.f)
+		[
+			MakeButton(LOCTEXT("ResetKeys", "RESET TO DEFAULTS"), FOnClicked::CreateLambda([this]
+			{
+				UArenaSettings::Get()->ResetBindings();
+				UArenaSettings::Get()->Save();
+				if (Owner.IsValid()) { Owner->ApplyKeyBindings(); }
+				return FReply::Handled();
+			}))
+		];
+}
+
+TSharedRef<SWidget> SArenaMenu::MakeBindingRow(const FArenaBindableAction& Action)
+{
+	const FName Id = Action.Id;
+	auto KeyButton = [this, Id](int32 Slot) -> TSharedRef<SWidget>
+	{
+		return SNew(SBox)
+			.WidthOverride(170.f)
+			.HeightOverride(34.f)
+			[
+				SNew(SButton)
+				.ButtonStyle(&KeyButtonStyle)
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				.OnClicked_Lambda([this, Id, Slot] { BeginCapture(Id, Slot); return FReply::Handled(); })
+				[
+					SNew(STextBlock)
+					.Font(Font("Bold", 13))
+					.Text_Lambda([this, Id, Slot]
+					{
+						if (CaptureAction == Id && CaptureSlot == Slot)
+						{
+							return LOCTEXT("Waiting", "...");
+						}
+						const FKey Key = UArenaSettings::Get()->GetBinding(Id).GetKey(Slot);
+						return Key.IsValid() ? Key.GetDisplayName(false) : FText::FromString(TEXT("-"));
+					})
+					.ColorAndOpacity_Lambda([this, Id, Slot]
+					{
+						const bool bEmpty = !UArenaSettings::Get()->GetBinding(Id).GetKey(Slot).IsValid();
+						return FSlateColor(bEmpty ? DimText : TextColor);
+					})
+				]
+			];
+	};
+
+	return SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().FillWidth(1.f).VAlign(VAlign_Center)
+		[
+			SNew(STextBlock)
+			.Text(Action.Label)
+			.Font(Font("Regular", 14))
+			.ColorAndOpacity(TextColor)
+		]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(6.f, 0.f)[KeyButton(0)]
+		+ SHorizontalBox::Slot().AutoWidth()[KeyButton(1)];
+}
+
+TSharedRef<SWidget> SArenaMenu::MakeCaptureOverlay()
+{
+	return SAssignNew(CaptureWidget, SArenaKeyCapture)
+		.Visibility_Lambda([this] { return IsCapturing() ? EVisibility::Visible : EVisibility::Collapsed; })
+		.OnKeyCaptured(FOnArenaKeyCaptured::CreateSP(this, &SArenaMenu::OnKeyCaptured))
+		[
+			SNew(SBorder)
+			.BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+			.BorderBackgroundColor(FLinearColor(0.f, 0.f, 0.f, 0.75f))
+			.HAlign(HAlign_Center)
+			.VAlign(VAlign_Center)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+				[
+					SNew(STextBlock)
+					.Font(Font("Bold", 28))
+					.ColorAndOpacity(TextColor)
+					.Text_Lambda([this]
+					{
+						const FArenaBindableAction* Action = UArenaSettings::GetBindableActions().FindByPredicate(
+							[this](const FArenaBindableAction& A) { return A.Id == CaptureAction; });
+						return FText::Format(LOCTEXT("PressKey", "Press a key for \"{0}\""), Action ? Action->Label : FText::GetEmpty());
+					})
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.f, 12.f, 0.f, 0.f)
+				[
+					SNew(STextBlock)
+					.Font(Font("Regular", 16))
+					.ColorAndOpacity(DimText)
+					.Text(LOCTEXT("CaptureHint", "Esc to cancel    Backspace to clear"))
+				]
+			]
+		];
+}
+
+void SArenaMenu::BeginCapture(FName Action, int32 Slot)
+{
+	CaptureAction = Action;
+	CaptureSlot = Slot;
+	FSlateApplication::Get().SetKeyboardFocus(CaptureWidget);
+}
+
+void SArenaMenu::OnKeyCaptured(const FKey& Key)
+{
+	if (Key == EKeys::Escape)
+	{
+		EndCapture();
+		return;
+	}
+	// Reserved for the menu and console.
+	if (Key == EKeys::F10 || Key == EKeys::Tilde || Key.IsGamepadKey() || Key.IsTouch())
+	{
+		return;
+	}
+
+	const FKey NewKey = (Key == EKeys::BackSpace || Key == EKeys::Delete) ? EKeys::Invalid : Key;
+	UArenaSettings* Settings = UArenaSettings::Get();
+	Settings->SetBindingKey(CaptureAction, CaptureSlot, NewKey);
+	Settings->Save();
+	if (Owner.IsValid())
+	{
+		Owner->ApplyKeyBindings();
+	}
+	EndCapture();
+}
+
+void SArenaMenu::EndCapture()
+{
+	CaptureAction = NAME_None;
+	FSlateApplication::Get().SetKeyboardFocus(SharedThis(this));
 }
 
 // ---------------------------------------------------------------------------

@@ -7,13 +7,14 @@
 #include "ArenaPlayerState.h"
 #include "ArenaGameMode.h"
 #include "ArenaGameState.h"
-#include "ArenaRocket.h"
+#include "ArenaProjectile.h"
 #include "ArenaVisuals.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EnhancedInputComponent.h"
+#include "InputAction.h"
 #include "InputActionValue.h"
 #include "Engine/StaticMesh.h"
 #include "Net/UnrealNetwork.h"
@@ -24,6 +25,20 @@ namespace
 	constexpr float StandingEyeHeight = QU(28.f); // VEC_VIEW
 	constexpr float CrouchedEyeHeight = QU(12.f); // VEC_DUCK_VIEW
 	constexpr float MouseYawPerCount = 0.022f;    // m_yaw / m_pitch
+
+	/**
+	 * Pellet / spread directions from a seed the client sends with the shot,
+	 * so the shooter's predicted tracers match what the server traces.
+	 */
+	void GetShotDirections(const FArenaWeaponInfo& Info, const FVector& Dir, int32 Seed, TArray<FVector>& Out)
+	{
+		FRandomStream Stream(Seed);
+		const float HalfAngle = FMath::DegreesToRadians(Info.SpreadDegrees);
+		for (int32 i = 0; i < FMath::Max(1, Info.Pellets); ++i)
+		{
+			Out.Add(HalfAngle > 0.f ? Stream.VRandCone(Dir, HalfAngle) : Dir);
+		}
+	}
 }
 
 AArenaCharacter::AArenaCharacter(const FObjectInitializer& ObjectInitializer)
@@ -104,6 +119,7 @@ void AArenaCharacter::BeginPlay()
 	if (HasAuthority())
 	{
 		Ammo.Init(0, ArenaWeaponCount);
+		GiveWeapon(EArenaWeapon::Gauntlet, 0);
 		GiveWeapon(EArenaWeapon::MachineGun, GetWeaponInfo(EArenaWeapon::MachineGun).StartAmmo);
 	}
 	UpdateColors();
@@ -145,9 +161,14 @@ void AArenaCharacter::UpdateWeaponVisuals()
 	FVector Scale;
 	switch (CurrentWeapon)
 	{
-	case EArenaWeapon::RocketLauncher: Scale = FVector(0.45f, 0.11f, 0.11f); break;
-	case EArenaWeapon::Railgun:        Scale = FVector(0.60f, 0.06f, 0.08f); break;
-	default:                           Scale = FVector(0.35f, 0.07f, 0.09f); break;
+	case EArenaWeapon::Gauntlet:        Scale = FVector(0.18f, 0.14f, 0.14f); break;
+	case EArenaWeapon::Shotgun:         Scale = FVector(0.40f, 0.10f, 0.08f); break;
+	case EArenaWeapon::GrenadeLauncher: Scale = FVector(0.35f, 0.12f, 0.12f); break;
+	case EArenaWeapon::RocketLauncher:  Scale = FVector(0.45f, 0.11f, 0.11f); break;
+	case EArenaWeapon::LightningGun:    Scale = FVector(0.40f, 0.08f, 0.10f); break;
+	case EArenaWeapon::Railgun:         Scale = FVector(0.60f, 0.06f, 0.08f); break;
+	case EArenaWeapon::PlasmaGun:       Scale = FVector(0.38f, 0.10f, 0.10f); break;
+	default:                            Scale = FVector(0.35f, 0.07f, 0.09f); break;
 	}
 	ViewGunMesh->SetRelativeScale3D(Scale);
 	WorldGunMesh->SetRelativeScale3D(Scale);
@@ -266,11 +287,9 @@ void AArenaCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComp
 	Input->BindAction(PC->FireAction, ETriggerEvent::Triggered, this, &AArenaCharacter::OnFireHeld);
 	Input->BindAction(PC->NextWeaponAction, ETriggerEvent::Started, this, &AArenaCharacter::OnNextWeapon);
 	Input->BindAction(PC->LastWeaponAction, ETriggerEvent::Started, this, &AArenaCharacter::OnLastWeapon);
-	if (PC->WeaponActions.Num() >= 3)
+	for (const UInputAction* WeaponAction : PC->WeaponActions)
 	{
-		Input->BindAction(PC->WeaponActions[0], ETriggerEvent::Started, this, &AArenaCharacter::OnWeapon1);
-		Input->BindAction(PC->WeaponActions[1], ETriggerEvent::Started, this, &AArenaCharacter::OnWeapon2);
-		Input->BindAction(PC->WeaponActions[2], ETriggerEvent::Started, this, &AArenaCharacter::OnWeapon3);
+		Input->BindAction(WeaponAction, ETriggerEvent::Started, this, &AArenaCharacter::OnSelectWeaponAction);
 	}
 }
 
@@ -287,10 +306,11 @@ void AArenaCharacter::OnMoveRight(const FInputActionValue& Value)
 
 void AArenaCharacter::OnLook(const FInputActionValue& Value)
 {
-	const float Scale = MouseYawPerCount * UArenaSettings::Get()->Sensitivity;
+	const UArenaSettings* Settings = UArenaSettings::Get();
+	const float Scale = MouseYawPerCount * Settings->Sensitivity;
 	const FVector2D Delta = Value.Get<FVector2D>();
 	AddControllerYawInput(Delta.X * Scale);
-	AddControllerPitchInput(Delta.Y * Scale);
+	AddControllerPitchInput(Delta.Y * Scale * (Settings->bInvertMouse ? -1.f : 1.f));
 }
 
 void AArenaCharacter::OnJumpStarted()
@@ -345,12 +365,30 @@ void AArenaCharacter::OnFireHeld()
 	TryFire();
 }
 
+void AArenaCharacter::OnSelectWeaponAction(const FInputActionInstance& Instance)
+{
+	if (const AArenaPlayerController* PC = Cast<AArenaPlayerController>(GetController()))
+	{
+		const int32 Index = PC->WeaponActions.IndexOfByKey(Instance.GetSourceAction());
+		if (Index >= 0 && Index < ArenaWeaponCount)
+		{
+			SelectWeapon(static_cast<EArenaWeapon>(Index));
+		}
+	}
+}
+
+bool AArenaCharacter::CanFire(EArenaWeapon Weapon) const
+{
+	return HasWeapon(Weapon) && (!GetWeaponInfo(Weapon).UsesAmmo() || GetAmmo(Weapon) > 0);
+}
+
 void AArenaCharacter::OnNextWeapon()
 {
+	// Cycles through weapons you can actually fire, like Quake's weapnext.
 	for (int32 Step = 1; Step <= ArenaWeaponCount; ++Step)
 	{
 		const EArenaWeapon Candidate = static_cast<EArenaWeapon>(((int32)CurrentWeapon + Step) % ArenaWeaponCount);
-		if (HasWeapon(Candidate))
+		if (CanFire(Candidate))
 		{
 			SelectWeapon(Candidate);
 			return;
@@ -406,7 +444,7 @@ void AArenaCharacter::TryFire()
 	{
 		return;
 	}
-	if (GetAmmo(CurrentWeapon) <= 0)
+	if (!CanFire(CurrentWeapon))
 	{
 		UArenaAudio::Play2D(this, EArenaSound::NoAmmo, 0.6f);
 		NextFireTime = Now + 0.4f;
@@ -417,29 +455,39 @@ void AArenaCharacter::TryFire()
 	const FArenaWeaponInfo& Info = GetWeaponInfo(CurrentWeapon);
 	NextFireTime = Now + Info.RefireTime;
 	ViewKick = 1.f;
-	// Your own gun is heard without spatialization; others hear it via the server's multicast.
-	UArenaAudio::Play2D(this, GetFireSound(CurrentWeapon), 0.6f, FMath::FRandRange(0.97f, 1.03f));
+	// Your own gun is heard without spatialization; others hear it via the server.
+	// The lightning gun fires 20 times a second, so keep it quieter.
+	const float OwnVolume = CurrentWeapon == EArenaWeapon::LightningGun ? 0.35f : 0.6f;
+	UArenaAudio::Play2D(this, Info.FireSound, OwnVolume, FMath::FRandRange(0.97f, 1.03f));
 
 	const FVector Origin = Camera->GetComponentLocation();
 	const FVector Dir = GetControlRotation().Vector();
+	const int32 Seed = FMath::Rand();
 
 	// Predict hitscan tracers locally so the shooter sees them without latency.
-	if (!HasAuthority() && CurrentWeapon != EArenaWeapon::RocketLauncher)
+	if (!HasAuthority() && !Info.bProjectile && Info.TracerWidth > 0.f)
 	{
-		FHitResult Hit;
+		TArray<FVector> Dirs;
+		GetShotDirections(Info, Dir, Seed, Dirs);
+		TArray<FVector_NetQuantize> Ends;
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(ArenaTracerPredict), true, this);
-		const FVector End = Origin + Dir * 50000.f;
-		const bool bHit = GetWorld()->LineTraceSingleByObjectType(Hit, Origin, End, FCollisionObjectQueryParams(ECC_WorldStatic), Params);
-		AArenaGameState::SpawnShotVisual(GetWorld(), this, CurrentWeapon, bHit ? Hit.ImpactPoint : End);
+		for (const FVector& ShotDir : Dirs)
+		{
+			FHitResult Hit;
+			const FVector End = Origin + ShotDir * Info.Range;
+			const bool bHit = GetWorld()->LineTraceSingleByObjectType(Hit, Origin, End, FCollisionObjectQueryParams(ECC_WorldStatic), Params);
+			Ends.Add(bHit ? Hit.ImpactPoint : End);
+		}
+		AArenaGameState::SpawnShotVisual(GetWorld(), this, CurrentWeapon, Ends);
 	}
 
-	ServerFire(Origin, Dir);
+	ServerFire(Origin, Dir, Seed);
 }
 
-void AArenaCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Dir)
+void AArenaCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Dir, int32 Seed)
 {
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (bDead || Now < ServerNextFireTime || GetAmmo(CurrentWeapon) <= 0)
+	if (bDead || Now < ServerNextFireTime || !CanFire(CurrentWeapon))
 	{
 		return;
 	}
@@ -447,73 +495,94 @@ void AArenaCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVec
 	// Allow some slack for jitter, but never faster than 80% of the refire time.
 	const FArenaWeaponInfo& Info = GetWeaponInfo(CurrentWeapon);
 	ServerNextFireTime = Now + Info.RefireTime * 0.8f;
-	--Ammo[(int32)CurrentWeapon];
+	if (Info.UsesAmmo())
+	{
+		--Ammo[(int32)CurrentWeapon];
+	}
 
 	// Trust the client's view, within reason.
 	const FVector ServerEye = Camera->GetComponentLocation();
 	const FVector ShotOrigin = FVector::DistSquared(Origin, ServerEye) < FMath::Square(250.f) ? FVector(Origin) : ServerEye;
 	const FVector ShotDir = Dir.GetSafeNormal();
 
-	if (CurrentWeapon == EArenaWeapon::RocketLauncher)
+	if (Info.bProjectile)
 	{
-		FireRocket(ShotOrigin, ShotDir);
+		FireProjectile(ShotOrigin, ShotDir, CurrentWeapon);
 	}
 	else
 	{
-		FireHitscan(ShotOrigin, ShotDir, CurrentWeapon);
+		FireHitscan(ShotOrigin, ShotDir, CurrentWeapon, Seed);
 	}
 }
 
-void AArenaCharacter::FireHitscan(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon)
+void AArenaCharacter::FireHitscan(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon, int32 Seed)
 {
 	const FArenaWeaponInfo& Info = GetWeaponInfo(Weapon);
-	const bool bRail = Weapon == EArenaWeapon::Railgun;
-	const FVector ShotDir = bRail ? Dir : FMath::VRandCone(Dir, FMath::DegreesToRadians(1.2f));
-	const FVector End = Origin + ShotDir * 50000.f;
+	TArray<FVector> Dirs;
+	GetShotDirections(Info, Dir, Seed, Dirs);
 
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(ArenaHitscan), true, this);
 	FCollisionObjectQueryParams Objects;
 	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
 	Objects.AddObjectTypesToQuery(ECC_Pawn);
 
-	// The railgun passes through players (up to 4), like Quake 3.
-	FVector TraceStart = Origin;
-	FVector VisualEnd = End;
-	const int32 MaxHits = bRail ? 4 : 1;
-	for (int32 i = 0; i < MaxHits; ++i)
+	// Pellets are summed per victim so a shotgun blast is one hit: one knockback,
+	// one hit sound and one damage number.
+	TMap<AArenaCharacter*, float> DamageByVictim;
+	TArray<FVector_NetQuantize> Ends;
+	for (const FVector& ShotDir : Dirs)
 	{
-		FHitResult Hit;
-		if (!GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, End, Objects, Params))
+		const FVector End = Origin + ShotDir * Info.Range;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(ArenaHitscan), true, this);
+		FVector TraceStart = Origin;
+		FVector VisualEnd = End;
+		// The railgun passes through players (MaxPierce), like Quake 3.
+		for (int32 i = 0; i < Info.MaxPierce; ++i)
 		{
-			VisualEnd = End;
-			break;
-		}
-		VisualEnd = Hit.ImpactPoint;
+			FHitResult Hit;
+			if (!GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, End, Objects, Params))
+			{
+				VisualEnd = End;
+				break;
+			}
+			VisualEnd = Hit.ImpactPoint;
 
-		AArenaCharacter* Victim = Cast<AArenaCharacter>(Hit.GetActor());
-		if (!Victim)
-		{
-			break;
+			AArenaCharacter* Victim = Cast<AArenaCharacter>(Hit.GetActor());
+			if (!Victim)
+			{
+				break;
+			}
+			DamageByVictim.FindOrAdd(Victim) += Info.Damage;
+			Params.AddIgnoredActor(Victim);
+			TraceStart = Hit.ImpactPoint;
+			if (Info.MaxPierce > 1)
+			{
+				VisualEnd = End;
+			}
 		}
-		Victim->ApplyArenaDamage(Info.Damage, GetController(), ArenaKnockback(ShotDir, Info.Damage), Weapon, Origin);
-		Params.AddIgnoredActor(Victim);
-		TraceStart = Hit.ImpactPoint;
-		VisualEnd = End;
+		Ends.Add(VisualEnd);
+	}
+
+	for (const TPair<AArenaCharacter*, float>& Pair : DamageByVictim)
+	{
+		Pair.Key->ApplyArenaDamage(Pair.Value, GetController(), ArenaKnockback(Dir, Pair.Value), Weapon, Origin);
 	}
 
 	if (AArenaGameState* GS = GetWorld()->GetGameState<AArenaGameState>())
 	{
-		GS->MulticastShot(this, Weapon, VisualEnd);
+		GS->MulticastShot(this, Weapon, Ends);
 	}
 }
 
-void AArenaCharacter::FireRocket(const FVector& Origin, const FVector& Dir)
+void AArenaCharacter::FireProjectile(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon)
 {
+	// Quake 3 lobs grenades slightly upward (dir.z += 0.2).
+	const FVector LaunchDir = Weapon == EArenaWeapon::GrenadeLauncher ? (Dir + FVector(0.f, 0.f, 0.2f)).GetSafeNormal() : Dir;
+
 	FActorSpawnParameters Params;
 	Params.Owner = this;
 	Params.Instigator = this;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	GetWorld()->SpawnActor<AArenaRocket>(Origin + Dir * QU(10.f), Dir.Rotation(), Params);
+	GetWorld()->SpawnActor<AArenaProjectile>(AArenaProjectile::ClassForWeapon(Weapon), Origin + LaunchDir * QU(10.f), LaunchDir.Rotation(), Params);
 }
 
 // ---------------------------------------------------------------------------
@@ -606,6 +675,11 @@ bool AArenaCharacter::GiveWeapon(EArenaWeapon Weapon, int32 AmmoAmount)
 	}
 	const FArenaWeaponInfo& Info = GetWeaponInfo(Weapon);
 	const bool bNew = !HasWeapon(Weapon);
+	if (!Info.UsesAmmo())
+	{
+		OwnedWeapons |= (1 << Index);
+		return bNew;
+	}
 	if (!bNew && Ammo[Index] >= Info.MaxAmmo)
 	{
 		return false;

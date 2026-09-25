@@ -61,9 +61,18 @@ void AArenaPickup::OnRep_Type()
 	case EArenaPickupType::MegaHealth:     Shape = ArenaVisuals::Sphere(); Scale = FVector(0.8f);  Color = FLinearColor(0.2f, 0.4f, 1.0f); break;
 	case EArenaPickupType::Armor:          Scale = FVector(0.5f, 0.5f, 0.6f);                      Color = FLinearColor(1.0f, 0.85f, 0.1f); break;
 	case EArenaPickupType::HeavyArmor:     Scale = FVector(0.7f, 0.7f, 0.8f);                      Color = FLinearColor(1.0f, 0.1f, 0.1f); break;
-	case EArenaPickupType::RocketLauncher: Scale = FVector(0.9f, 0.2f, 0.2f); Color = GetWeaponInfo(EArenaWeapon::RocketLauncher).Color; break;
-	case EArenaPickupType::Railgun:        Scale = FVector(1.1f, 0.12f, 0.15f); Color = GetWeaponInfo(EArenaWeapon::Railgun).Color; break;
 	case EArenaPickupType::Ammo:           Scale = FVector(0.3f);                                  Color = FLinearColor(0.7f, 0.6f, 0.3f); break;
+	default:
+	{
+		// Weapons: a long bar in the weapon's colour.
+		EArenaWeapon Weapon;
+		if (GetPickupWeapon(Type, Weapon))
+		{
+			Scale = FVector(0.9f, 0.18f, 0.18f);
+			Color = GetWeaponInfo(Weapon).Color;
+		}
+		break;
+	}
 	}
 	Mesh->SetStaticMesh(Shape);
 	Mesh->SetRelativeScale3D(Scale);
@@ -77,7 +86,8 @@ void AArenaPickup::OnRep_Available()
 	// Skip the initial replication when joining a game with items already taken.
 	if (!bAvailable && GetGameTimeSinceCreation() > 1.f)
 	{
-		const bool bWeapon = Type == EArenaPickupType::RocketLauncher || Type == EArenaPickupType::Railgun;
+		EArenaWeapon Weapon;
+		const bool bWeapon = GetPickupWeapon(Type, Weapon);
 		UArenaAudio::PlayAt(this, bWeapon ? EArenaSound::WeaponPickup : EArenaSound::Pickup, GetActorLocation());
 	}
 }
@@ -129,8 +139,6 @@ bool AArenaPickup::TryGive(AArenaCharacter* Character) const
 	case EArenaPickupType::MegaHealth:     return Character->GiveHealth(100, AArenaCharacter::MaxHealth);
 	case EArenaPickupType::Armor:          return Character->GiveArmor(50);
 	case EArenaPickupType::HeavyArmor:     return Character->GiveArmor(100);
-	case EArenaPickupType::RocketLauncher: return Character->GiveWeapon(EArenaWeapon::RocketLauncher, GetWeaponInfo(EArenaWeapon::RocketLauncher).StartAmmo);
-	case EArenaPickupType::Railgun:        return Character->GiveWeapon(EArenaWeapon::Railgun, GetWeaponInfo(EArenaWeapon::Railgun).StartAmmo);
 	case EArenaPickupType::Ammo:
 	{
 		bool bGave = false;
@@ -144,8 +152,12 @@ bool AArenaPickup::TryGive(AArenaCharacter* Character) const
 		}
 		return bGave;
 	}
+	default:
+	{
+		EArenaWeapon Weapon;
+		return GetPickupWeapon(Type, Weapon) && Character->GiveWeapon(Weapon, GetWeaponInfo(Weapon).StartAmmo);
 	}
-	return false;
+	}
 }
 
 float AArenaPickup::GetRespawnTime() const
@@ -156,8 +168,7 @@ float AArenaPickup::GetRespawnTime() const
 	case EArenaPickupType::Health:         return 35.f;
 	case EArenaPickupType::Armor:
 	case EArenaPickupType::HeavyArmor:     return 25.f;
-	case EArenaPickupType::RocketLauncher:
-	case EArenaPickupType::Railgun:        return 5.f;
-	default:                           return 40.f;
+	case EArenaPickupType::Ammo:           return 40.f;
+	default:                               return 5.f; // Weapons
 	}
 }
