@@ -31,6 +31,22 @@ void AArenaGameMode::InitGame(const FString& MapName, const FString& Options, FS
 
 	FragLimit = UGameplayStatics::GetIntOption(Options, TEXT("FragLimit"), FragLimit);
 	TimeLimitMinutes = UGameplayStatics::GetIntOption(Options, TEXT("TimeLimit"), FMath::RoundToInt(TimeLimitMinutes));
+	MapId = ArenaMap::Get(FName(*UGameplayStatics::ParseOption(Options, TEXT("Arena")))).Id;
+	UE_LOG(LogArena, Log, TEXT("Arena map: %s"), *MapId.ToString());
+
+	if (AArenaGameState* GS = GetGameState<AArenaGameState>())
+	{
+		GS->MapId = MapId;
+	}
+}
+
+void AArenaGameMode::InitGameState()
+{
+	Super::InitGameState();
+	if (AArenaGameState* GS = GetGameState<AArenaGameState>())
+	{
+		GS->MapId = MapId;
+	}
 }
 
 void AArenaGameMode::StartPlay()
@@ -43,7 +59,7 @@ void AArenaGameMode::SpawnPickups()
 {
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	for (const FArenaPickupSpot& Spot : ArenaMap::GetPickupSpots())
+	for (const FArenaPickupSpot& Spot : ArenaMap::Get(MapId).Pickups)
 	{
 		if (AArenaPickup* Pickup = GetWorld()->SpawnActor<AArenaPickup>(Spot.Location, FRotator::ZeroRotator, Params))
 		{
@@ -84,7 +100,7 @@ void AArenaGameMode::EnsureSpawnPoints()
 	}
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	for (const FTransform& Spawn : ArenaMap::GetSpawnPoints())
+	for (const FTransform& Spawn : ArenaMap::Get(MapId).Spawns)
 	{
 		if (AActor* Point = GetWorld()->SpawnActor<ATargetPoint>(Spawn.GetLocation(), Spawn.Rotator(), Params))
 		{
@@ -199,7 +215,7 @@ void AArenaGameMode::OnPlayerKilled(AController* Killer, AController* Victim, EA
 		GS->MulticastKill(bSuicide ? FString() : KillerPS->GetPlayerName(), VictimPS ? VictimPS->GetPlayerName() : FString(TEXT("?")), Weapon);
 	}
 
-	SendFragMessages(Killer, Victim, KillerPS, VictimPS);
+	SendFragMessages(Killer, Victim, KillerPS, VictimPS, Weapon);
 
 	if (!bSuicide && FragLimit > 0 && KillerPS->Frags >= FragLimit)
 	{
@@ -207,12 +223,15 @@ void AArenaGameMode::OnPlayerKilled(AController* Killer, AController* Victim, EA
 	}
 }
 
-void AArenaGameMode::SendFragMessages(AController* Killer, AController* Victim, AArenaPlayerState* KillerPS, AArenaPlayerState* VictimPS)
+void AArenaGameMode::SendFragMessages(AController* Killer, AController* Victim, AArenaPlayerState* KillerPS, AArenaPlayerState* VictimPS, EArenaWeapon Weapon)
 {
 	const bool bSuicide = !KillerPS || KillerPS == VictimPS;
 	if (AArenaPlayerController* VictimPC = Cast<AArenaPlayerController>(Victim))
 	{
-		VictimPC->ClientFragMessage(bSuicide ? FString(TEXT("You killed yourself")) : FString::Printf(TEXT("Fragged by %s"), *KillerPS->GetPlayerName()), false);
+		const FString Text = !bSuicide ? FString::Printf(TEXT("Fragged by %s"), *KillerPS->GetPlayerName())
+			: Weapon == EArenaWeapon::Count ? FString(TEXT("You fell into the void"))
+			: FString(TEXT("You killed yourself"));
+		VictimPC->ClientFragMessage(Text, false);
 	}
 	AArenaPlayerController* KillerPC = Cast<AArenaPlayerController>(Killer);
 	const AArenaGameState* GS = GetGameState<AArenaGameState>();
@@ -246,7 +265,84 @@ void AArenaGameMode::FinishMatch(AArenaPlayerState* Winner)
 
 void AArenaGameMode::HandleMatchHasEnded()
 {
+	// Set up the vote before the state change reaches clients, so it arrives with it.
+	StartMapVote();
 	Super::HandleMatchHasEnded();
-	// Show the scoreboard for a while, then reload the map for a new match.
-	GetWorldTimerManager().SetTimer(RestartTimer, this, &AArenaGameMode::RestartGame, 10.f);
+}
+
+void AArenaGameMode::StartMapVote()
+{
+	AArenaGameState* GS = GetGameState<AArenaGameState>();
+	if (!GS)
+	{
+		return;
+	}
+
+	// Offer up to three maps (all of them while there are only three).
+	TArray<FName> Options;
+	for (const FArenaMapDef& Map : ArenaMap::GetMaps())
+	{
+		Options.Add(Map.Id);
+	}
+	for (int32 i = Options.Num() - 1; i > 0; --i)
+	{
+		Options.Swap(i, FMath::RandRange(0, i));
+	}
+	Options.SetNum(FMath::Min(Options.Num(), 3));
+	Options.Sort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
+
+	for (APlayerState* PS : GS->PlayerArray)
+	{
+		if (AArenaPlayerState* APS = Cast<AArenaPlayerState>(PS))
+		{
+			APS->VotedMap = NAME_None;
+		}
+	}
+	GS->VoteOptions = Options;
+	GS->VoteEndTime = GetWorld()->GetTimeSeconds() + VoteDuration;
+	GS->RecountVotes();
+
+	GetWorldTimerManager().SetTimer(RestartTimer, this, &AArenaGameMode::FinishMapVote, VoteDuration);
+}
+
+void AArenaGameMode::CastVote(APlayerController* Voter, FName Map)
+{
+	AArenaGameState* GS = GetGameState<AArenaGameState>();
+	AArenaPlayerState* PS = Voter ? Voter->GetPlayerState<AArenaPlayerState>() : nullptr;
+	if (GS && PS && GS->VoteOptions.Contains(Map))
+	{
+		PS->VotedMap = Map;
+		GS->RecountVotes();
+	}
+}
+
+void AArenaGameMode::FinishMapVote()
+{
+	const AArenaGameState* GS = GetGameState<AArenaGameState>();
+	FName NextMap = MapId;
+	if (GS && GS->VoteOptions.Num() > 0)
+	{
+		// Most votes wins; ties (including nobody voting) are broken at random.
+		int32 Best = -1;
+		TArray<FName> Leaders;
+		for (int32 i = 0; i < GS->VoteOptions.Num(); ++i)
+		{
+			const int32 Votes = GS->VoteCounts.IsValidIndex(i) ? GS->VoteCounts[i] : 0;
+			if (Votes > Best)
+			{
+				Best = Votes;
+				Leaders.Reset();
+			}
+			if (Votes == Best)
+			{
+				Leaders.Add(GS->VoteOptions[i]);
+			}
+		}
+		NextMap = Leaders[FMath::RandRange(0, Leaders.Num() - 1)];
+	}
+
+	UE_LOG(LogArena, Log, TEXT("Next map: %s"), *NextMap.ToString());
+	const FString URL = FString::Printf(TEXT("/Engine/Maps/Entry?Arena=%s?FragLimit=%d?TimeLimit=%d%s"),
+		*NextMap.ToString(), FragLimit, FMath::RoundToInt(TimeLimitMinutes), GetNetMode() == NM_ListenServer ? TEXT("?listen") : TEXT(""));
+	GetWorld()->ServerTravel(URL, true);
 }

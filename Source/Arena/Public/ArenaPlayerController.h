@@ -6,6 +6,7 @@
 #include "ArenaPlayerController.generated.h"
 
 class ACameraActor;
+class SArenaMapVote;
 class SArenaMenu;
 class SWidget;
 class UInputAction;
@@ -42,6 +43,13 @@ public:
 	void JoinGame(const FString& Address);
 	void Disconnect();
 	void QuitToDesktop();
+
+	// End-of-match map vote
+	void ShowMapVote();
+	void HideMapVote();
+
+	UFUNCTION(Server, Reliable)
+	void ServerVoteMap(FName Map);
 
 	/** Applies volume and name (and window mode, vsync, frame limit if bIncludeDisplay) from UArenaSettings. */
 	void ApplyUserSettings(bool bIncludeDisplay);
@@ -112,6 +120,11 @@ private:
 
 	TSharedPtr<SArenaMenu> MenuWidget;
 	TSharedPtr<SWidget> MenuContainer;
+
+	TSharedPtr<SArenaMapVote> VoteWidget;
+	TSharedPtr<SWidget> VoteContainer;
+
+	void SetUIInputFor(TSharedPtr<SWidget> Widget);
 
 	UPROPERTY(Transient)
 	TObjectPtr<ACameraActor> MenuCamera;

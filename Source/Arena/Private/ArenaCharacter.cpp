@@ -7,6 +7,7 @@
 #include "ArenaPlayerState.h"
 #include "ArenaGameMode.h"
 #include "ArenaGameState.h"
+#include "ArenaMap.h"
 #include "ArenaProjectile.h"
 #include "ArenaVisuals.h"
 #include "Camera/CameraComponent.h"
@@ -203,6 +204,13 @@ void AArenaCharacter::Tick(float DeltaSeconds)
 	// Health and armor above 100 count down one point per second (Quake 3).
 	if (HasAuthority() && !bDead)
 	{
+		const AArenaGameState* GS = GetWorld()->GetGameState<AArenaGameState>();
+		if (GetActorLocation().Z < ArenaMap::Get(GS ? GS->MapId : NAME_None).KillZ)
+		{
+			Die(nullptr, EArenaWeapon::Count); // Count = killed by the world.
+			return;
+		}
+
 		TickDownAccumulator += DeltaSeconds;
 		while (TickDownAccumulator >= 1.f)
 		{

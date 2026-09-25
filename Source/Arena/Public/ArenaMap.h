@@ -55,14 +55,34 @@ struct FArenaPickupSpot
 	FVector Location;
 };
 
-/** The map is defined in code: one layout shared by server and clients. */
+/**
+ * One arena layout. Maps are defined in code and all load on the same engine level;
+ * the server picks one with the "?Arena=<Id>" URL option and replicates the choice,
+ * then every machine builds the same geometry locally.
+ */
+struct FArenaMapDef
+{
+	FName Id;
+	FText DisplayName;
+	FText Description;
+	void (*BuildGeometry)(UWorld* World);
+	/** Player spawns (capsule centre + yaw facing the middle). */
+	TArray<FTransform> Spawns;
+	TArray<FArenaPickupSpot> Pickups;
+	/** Falling below this height kills you (void maps). */
+	float KillZ;
+	// Main-menu camera orbit around the map.
+	float MenuOrbitRadius;
+	float MenuOrbitHeight;
+};
+
 namespace ArenaMap
 {
-	/** Player spawn points (feet location + yaw facing the middle). */
-	ARENA_API const TArray<FTransform>& GetSpawnPoints();
+	ARENA_API const TArray<FArenaMapDef>& GetMaps();
 
-	ARENA_API const TArray<FArenaPickupSpot>& GetPickupSpots();
+	/** The map with this id, or the first map if unknown. */
+	ARENA_API const FArenaMapDef& Get(FName Id);
 
-	/** Spawns geometry, jump pads and lighting on this machine. */
-	ARENA_API void BuildLocal(UWorld* World);
+	/** Spawns the map's geometry, jump pads and lighting on this machine. */
+	ARENA_API void BuildLocal(UWorld* World, FName MapId);
 }

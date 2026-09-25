@@ -26,7 +26,7 @@ which are synthesized by a script (see [Sounds](#sounds)).
 Launching the game normally (double-click a packaged build, or **Play → Standalone
 Game** in the editor) opens the **main menu** over a slow camera orbit of the arena:
 
-- **Host Game**: pick a frag limit and time limit, then start a listen server that friends can join.
+- **Host Game**: pick a map, a frag limit and a time limit, then start a listen server that friends can join.
 - **Join Game**: enter an IP (or `IP:port`). The last address is remembered.
 - **Settings** has two tabs:
   - **General**: player name, mouse sensitivity, invert mouse, field of view, volume,
@@ -45,6 +45,23 @@ session, so use F10 there.
 Playing in the editor as **Listen Server**, or running `Host.bat` / `Join.bat`, skips
 the main menu and drops you straight into a match.
 
+## Maps and voting
+
+| Map | Layout |
+| --- | --- |
+| **Courtyard** | Walled square: corner towers joined by a bridge ring, a central platform with ramps, jump pads up to the towers |
+| **Skyline** | Floating islands over a void (Longest Yard style). Jump pads out to the side islands, bhop gaps to the lower corners, pads up to a high Mega platform. Falling off kills you |
+| **Canyon** | Long walled strip with raised bases at both ends and a sloped valley in the middle to ramp through for speed, or cross on the bridge |
+
+When a match ends (frag or time limit), the scoreboard stays up and everyone gets
+15 seconds to vote for the next map by clicking a card. The most votes wins, and ties
+(or no votes) are decided at random. Then the server moves everyone to the new map
+with the same limits. `VoteDuration` in `Config/DefaultGame.ini` changes the timer.
+
+Maps are defined in code in `ArenaMap.cpp` (`FArenaMapDef`: geometry, spawns, items,
+kill height, menu camera). Every map loads on the same engine level; the server picks
+one with the `Arena` URL option and replicates the choice.
+
 ## Play outside the editor
 
 The scripts in `Scripts/` find the engine under `C:\Program Files\Epic Games\UE_5.*`,
@@ -58,7 +75,7 @@ or you can set `UE_ROOT` yourself.
 | `ImportSounds.bat` | Regenerates and re-imports the sound effects |
 
 Match options go on the URL: `Host.bat` passes extra args through, or from the
-console: `open /Engine/Maps/Entry?listen?FragLimit=30?TimeLimit=15`.
+console: `open /Engine/Maps/Entry?listen?Arena=Skyline?FragLimit=30?TimeLimit=15`.
 
 ## Controls
 
@@ -164,7 +181,8 @@ sound is skipped with a log warning.
 | `ArenaPlayerController` | Input actions and key bindings, menus, settings, respawn requests |
 | `ArenaGameMode` | FFA deathmatch rules, spawn selection, frag/time limits |
 | `ArenaGameState` | Replicated match state, `sv_airaccelerate`, effect multicasts, kill feed |
-| `ArenaMap` | The generated level (geometry, jump pads, lighting) and spawn/item layout |
+| `ArenaMap` | The map registry: each map's geometry, jump pads, spawns and items, plus lighting |
+| `SArenaMapVote` | End-of-match map vote cards |
 | `ArenaProjectile` | Rocket, grenade and plasma projectiles (direct + splash damage) |
 | `ArenaPickup` | Health, armor, weapon and ammo items |
 | `ArenaHUD` | Canvas HUD, scoreboard, hit markers, damage numbers and indicators |

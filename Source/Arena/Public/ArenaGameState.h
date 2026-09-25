@@ -24,6 +24,28 @@ class ARENA_API AArenaGameState : public AGameState
 public:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void HandleMatchHasEnded() override;
+
+	/** Which ArenaMap layout this match uses. Set by the server before BeginPlay. */
+	UPROPERTY(Replicated)
+	FName MapId;
+
+	/** End-of-match vote: the maps on offer and their current vote counts. */
+	UPROPERTY(Replicated)
+	TArray<FName> VoteOptions;
+
+	UPROPERTY(Replicated)
+	TArray<int32> VoteCounts;
+
+	/** Server world time when the vote closes. */
+	UPROPERTY(Replicated)
+	float VoteEndTime = 0.f;
+
+	bool IsVoting() const { return VoteOptions.Num() > 0; }
+	float GetVoteTimeRemaining() const;
+
+	/** Server: recount votes from every player's choice. */
+	void RecountVotes();
 
 	/** sv_airaccelerate, owned by the server so prediction matches everywhere. */
 	UPROPERTY(Replicated)

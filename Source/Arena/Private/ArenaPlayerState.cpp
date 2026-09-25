@@ -8,6 +8,7 @@ void AArenaPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AArenaPlayerState, Frags);
 	DOREPLIFETIME(AArenaPlayerState, Deaths);
 	DOREPLIFETIME(AArenaPlayerState, ColorIndex);
+	DOREPLIFETIME(AArenaPlayerState, VotedMap);
 }
 
 void AArenaPlayerState::CopyProperties(APlayerState* PlayerState)
