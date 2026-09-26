@@ -6,10 +6,37 @@
 #include "ArenaCharacter.generated.h"
 
 class UCameraComponent;
+class UPointLightComponent;
 class UStaticMeshComponent;
 class UArenaMovementComponent;
 struct FInputActionInstance;
 struct FInputActionValue;
+
+/** What the third-person animation needs from the character each frame. */
+struct FArenaPoseInput
+{
+	FVector Velocity = FVector::ZeroVector;
+	bool bOnGround = true;
+	bool bCrouched = false;
+	/** Degrees, positive up. */
+	float AimPitch = 0.f;
+	/** Gun and left-hand grip in the body mesh's component space. */
+	FTransform Gun = FTransform::Identity;
+	FVector LeftGrip = FVector::ZeroVector;
+	bool bHoldingGun = false;
+	bool bLeftGrip = false;
+};
+
+/** Fakes movement for the body animation (the showcase poses characters with it). */
+struct FArenaPoseOverride
+{
+	bool bEnabled = false;
+	/** Relative to the character: X forward, Y right. */
+	FVector LocalVelocity = FVector::ZeroVector;
+	bool bInAir = false;
+	bool bCrouched = false;
+	float AimPitch = 0.f;
+};
 
 UCLASS()
 class ARENA_API AArenaCharacter : public ACharacter
@@ -56,6 +83,12 @@ public:
 	/** Tip of whichever gun this machine renders for this pawn. */
 	FVector GetMuzzleLocation() const;
 
+	/** Cosmetic: muzzle flash, gun recoil and spin-up. Runs wherever a shot is seen. */
+	void PlayFireEffects();
+
+	FArenaPoseInput GetPoseInput() const;
+	FArenaPoseOverride PoseOverride;
+
 	/** True only on the machine of the human playing this pawn (not for bots on the server). */
 	bool IsLocalPlayerView() const { return IsLocallyControlled() && IsPlayerControlled(); }
 
@@ -64,7 +97,12 @@ public:
 	void EquipWeapon(EArenaWeapon Weapon) { SelectWeapon(Weapon); }
 	bool CanFire(EArenaWeapon Weapon) const;
 
+	/** Paints the body in the owner's player colour. */
 	void UpdateColors();
+	void SetBodyColor(const FLinearColor& Color);
+
+	/** Server: kills the pawn outright (showcase, console). */
+	void Kill() { Die(nullptr, EArenaWeapon::Count); }
 
 protected:
 	virtual void BeginPlay() override;
@@ -108,6 +146,11 @@ protected:
 	void OnRep_Health(int32 OldHealth);
 
 	void UpdateMovementSounds(float DeltaSeconds);
+	void UpdateWorldGun(float DeltaSeconds);
+	void UpdateViewModel(float DeltaSeconds);
+	void UpdateGunEffects(float DeltaSeconds);
+	void UpdateDeathCamera(float DeltaSeconds);
+	void AttachGunParts(UStaticMeshComponent* Gun, UStaticMeshComponent* Spin, UStaticMeshComponent* Flash);
 
 	UFUNCTION()
 	void OnRep_CurrentWeapon();
@@ -115,19 +158,28 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UCameraComponent> Camera;
 
-	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> BodyMesh;
-
-	UPROPERTY(VisibleAnywhere)
-	TObjectPtr<UStaticMeshComponent> HeadMesh;
-
-	/** Third-person gun, seen by everyone else. */
+	/** Third-person gun, seen by everyone else, held by the body's hand IK. */
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> WorldGunMesh;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UStaticMeshComponent> WorldGunSpin;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UStaticMeshComponent> WorldFlash;
 
 	/** First-person gun, seen only by the owner. */
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> ViewGunMesh;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UStaticMeshComponent> ViewGunSpin;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UStaticMeshComponent> ViewFlash;
+
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UPointLightComponent> FlashLight;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Health)
 	int32 Health = SpawnHealth;
@@ -154,6 +206,25 @@ private:
 	float TickDownAccumulator = 0.f;
 	float ViewKick = 0.f;
 	bool bJumpHeld = false;
+
+	// Cosmetic gun state.
+	FTransform GunFrame = FTransform::Identity; // Third-person gun, body component space.
+	float BodyKick = 0.f;
+	float FlashTime = 0.f;
+	float LastShotTime = -100.f;
+	float SpinSpeed = 0.f;
+	float SpinAngle = 0.f;
+	float GunCrouch = 0.f;
+	FVector LeftGrip = FVector::ZeroVector;
+	bool bHasLeftGrip = false;
+
+	// First-person view model motion.
+	float BobPhase = 0.f;
+	float BobAmount = 0.f;
+	float RaiseAlpha = 1.f;
+	float LandDip = 0.f;
+	FRotator Sway = FRotator::ZeroRotator;
+	FRotator LastViewRotation = FRotator::ZeroRotator;
 
 	// Cosmetic movement-sound state, tracked on every machine.
 	bool bWasOnGround = true;

@@ -12,7 +12,9 @@
 #include "Engine/CollisionProfile.h"
 #include "Engine/DirectionalLight.h"
 #include "Engine/ExponentialHeightFog.h"
+#include "Engine/PostProcessVolume.h"
 #include "Engine/SkyLight.h"
+#include "Engine/TextureCube.h"
 #include "Engine/World.h"
 
 #define LOCTEXT_NAMESPACE "ArenaMap"
@@ -25,38 +27,39 @@ namespace
 	constexpr float CapsuleHalfHeight = QU(36.f);
 	constexpr float Hover = 50.f; // Item height above the floor.
 
-	const FLinearColor FloorColor(0.10f, 0.10f, 0.12f);
-	const FLinearColor WallColor(0.32f, 0.16f, 0.10f);
-	const FLinearColor PlatformColor(0.55f, 0.33f, 0.12f);
-	const FLinearColor TowerColor(0.28f, 0.28f, 0.33f);
-	const FLinearColor BridgeColor(0.22f, 0.25f, 0.30f);
-	const FLinearColor PillarColor(0.40f, 0.40f, 0.42f);
-	const FLinearColor CrateColor(0.45f, 0.30f, 0.15f);
+	// Top texture, side texture, tint. Textures are greyscale, so the tint sets the colour.
+	const FArenaSurfaceStyle FloorStyle{ EArenaSurface::Tiles, EArenaSurface::Concrete, FLinearColor(0.24f, 0.26f, 0.30f) };
+	const FArenaSurfaceStyle WallStyle{ EArenaSurface::Concrete, EArenaSurface::Panels, FLinearColor(0.56f, 0.38f, 0.28f) };
+	const FArenaSurfaceStyle PlatformStyle{ EArenaSurface::Plate, EArenaSurface::Panels, FLinearColor(0.62f, 0.40f, 0.18f) };
+	const FArenaSurfaceStyle TowerStyle{ EArenaSurface::Plate, EArenaSurface::Concrete, FLinearColor(0.40f, 0.41f, 0.46f) };
+	const FArenaSurfaceStyle BridgeStyle{ EArenaSurface::Plate, EArenaSurface::Panels, FLinearColor(0.34f, 0.38f, 0.44f) };
+	const FArenaSurfaceStyle PillarStyle{ EArenaSurface::Concrete, EArenaSurface::Concrete, FLinearColor(0.52f, 0.52f, 0.54f) };
+	const FArenaSurfaceStyle CrateStyle{ EArenaSurface::Panels, EArenaSurface::Panels, FLinearColor(0.58f, 0.42f, 0.22f) };
+	const FArenaSurfaceStyle StoneStyle{ EArenaSurface::Bricks, EArenaSurface::Bricks, FLinearColor(0.44f, 0.46f, 0.50f) };
+	const FArenaSurfaceStyle IslandStyle{ EArenaSurface::Sand, EArenaSurface::Bricks, FLinearColor(0.36f, 0.46f, 0.36f) };
+	const FArenaSurfaceStyle SandStyle{ EArenaSurface::Sand, EArenaSurface::Sand, FLinearColor(0.64f, 0.50f, 0.34f) };
+	const FArenaSurfaceStyle CliffStyle{ EArenaSurface::Sand, EArenaSurface::Bricks, FLinearColor(0.52f, 0.34f, 0.25f) };
 	const FLinearColor PadColor(0.10f, 0.70f, 0.95f);
-	const FLinearColor StoneColor(0.30f, 0.32f, 0.36f);
-	const FLinearColor IslandColor(0.20f, 0.35f, 0.30f);
-	const FLinearColor SandColor(0.50f, 0.38f, 0.22f);
-	const FLinearColor CliffColor(0.38f, 0.22f, 0.14f);
 
-	void SpawnBlock(UWorld* World, const FVector& Center, const FVector& HalfExtent, const FLinearColor& Color, const FRotator& Rotation = FRotator::ZeroRotator)
+	void SpawnBlock(UWorld* World, const FVector& Center, const FVector& HalfExtent, const FArenaSurfaceStyle& Style, const FRotator& Rotation = FRotator::ZeroRotator)
 	{
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		if (AArenaBlock* Block = World->SpawnActor<AArenaBlock>(Center, Rotation, Params))
 		{
-			Block->Init(HalfExtent, Color);
+			Block->Init(HalfExtent, Style);
 		}
 	}
 
 	/** A ramp whose top surface runs from Bottom to Top (edge midpoints). */
-	void SpawnRamp(UWorld* World, const FVector& Bottom, const FVector& Top, float Width, const FLinearColor& Color = PlatformColor)
+	void SpawnRamp(UWorld* World, const FVector& Bottom, const FVector& Top, float Width, const FArenaSurfaceStyle& Style = PlatformStyle)
 	{
 		constexpr float Thickness = 40.f;
 		const FVector Dir = Top - Bottom;
 		const FRotator Rotation = Dir.Rotation();
 		const FVector Up = FRotationMatrix(Rotation).GetUnitAxis(EAxis::Z);
 		const FVector Center = (Bottom + Top) * 0.5f - Up * Thickness * 0.5f;
-		SpawnBlock(World, Center, FVector(Dir.Size() * 0.5f + 10.f, Width * 0.5f, Thickness * 0.5f), Color, Rotation);
+		SpawnBlock(World, Center, FVector(Dir.Size() * 0.5f + 10.f, Width * 0.5f, Thickness * 0.5f), Style, Rotation);
 	}
 
 	/** Ballistic launch that peaks ApexAbove over the higher endpoint and lands on To. */
@@ -114,14 +117,14 @@ namespace
 
 		void Build(UWorld* World)
 		{
-			SpawnBlock(World, FVector(0.f, 0.f, -50.f), FVector(3300.f, 3300.f, 50.f), FloorColor);
+			SpawnBlock(World, FVector(0.f, 0.f, -50.f), FVector(3300.f, 3300.f, 50.f), FloorStyle);
 			for (const float S : { -1.f, 1.f })
 			{
-				SpawnBlock(World, FVector(S * 3250.f, 0.f, 1000.f), FVector(50.f, 3300.f, 1000.f), WallColor);
-				SpawnBlock(World, FVector(0.f, S * 3250.f, 1000.f), FVector(3300.f, 50.f, 1000.f), WallColor);
+				SpawnBlock(World, FVector(S * 3250.f, 0.f, 1000.f), FVector(50.f, 3300.f, 1000.f), WallStyle);
+				SpawnBlock(World, FVector(0.f, S * 3250.f, 1000.f), FVector(3300.f, 50.f, 1000.f), WallStyle);
 			}
 
-			SpawnBlock(World, FVector(0.f, 0.f, PlatformTop * 0.5f), FVector(700.f, 700.f, PlatformTop * 0.5f), PlatformColor);
+			SpawnBlock(World, FVector(0.f, 0.f, PlatformTop * 0.5f), FVector(700.f, 700.f, PlatformTop * 0.5f), PlatformStyle);
 			for (const float S : { -1.f, 1.f })
 			{
 				SpawnRamp(World, FVector(S * 1900.f, 0.f, 0.f), FVector(S * 700.f, 0.f, PlatformTop), 400.f);
@@ -132,18 +135,18 @@ namespace
 			{
 				for (const float Y : { -1.f, 1.f })
 				{
-					SpawnBlock(World, FVector(X * 2300.f, Y * 2300.f, TowerTop * 0.5f), FVector(500.f, 500.f, TowerTop * 0.5f), TowerColor);
+					SpawnBlock(World, FVector(X * 2300.f, Y * 2300.f, TowerTop * 0.5f), FVector(500.f, 500.f, TowerTop * 0.5f), TowerStyle);
 					SpawnJumpPad(World, FVector(X * 1300.f, Y * 1300.f, 0.f), FVector(X * 2300.f, Y * 2300.f, TowerTop));
-					SpawnBlock(World, FVector(X * 1400.f, Y * 600.f, 500.f), FVector(100.f, 100.f, 500.f), PillarColor);
-					SpawnBlock(World, FVector(X * 600.f, Y * 1400.f, 500.f), FVector(100.f, 100.f, 500.f), PillarColor);
-					SpawnBlock(World, FVector(X * 1000.f, Y * 2400.f, 50.f), FVector(150.f, 150.f, 50.f), CrateColor);
+					SpawnBlock(World, FVector(X * 1400.f, Y * 600.f, 500.f), FVector(100.f, 100.f, 500.f), PillarStyle);
+					SpawnBlock(World, FVector(X * 600.f, Y * 1400.f, 500.f), FVector(100.f, 100.f, 500.f), PillarStyle);
+					SpawnBlock(World, FVector(X * 1000.f, Y * 2400.f, 50.f), FVector(150.f, 150.f, 50.f), CrateStyle);
 				}
 			}
 
 			for (const float S : { -1.f, 1.f })
 			{
-				SpawnBlock(World, FVector(0.f, S * 2300.f, TowerTop - 25.f), FVector(1800.f, 250.f, 25.f), BridgeColor);
-				SpawnBlock(World, FVector(S * 2300.f, 0.f, TowerTop - 25.f), FVector(250.f, 1800.f, 25.f), BridgeColor);
+				SpawnBlock(World, FVector(0.f, S * 2300.f, TowerTop - 25.f), FVector(1800.f, 250.f, 25.f), BridgeStyle);
+				SpawnBlock(World, FVector(S * 2300.f, 0.f, TowerTop - 25.f), FVector(250.f, 1800.f, 25.f), BridgeStyle);
 			}
 		}
 
@@ -217,13 +220,13 @@ namespace
 		void Build(UWorld* World)
 		{
 			// Main platform.
-			SpawnBlock(World, FVector(0.f, 0.f, -60.f), FVector(900.f, 900.f, 60.f), StoneColor);
+			SpawnBlock(World, FVector(0.f, 0.f, -60.f), FVector(900.f, 900.f, 60.f), StoneStyle);
 
 			for (const float S : { -1.f, 1.f })
 			{
 				// Side islands, with pads out from the main platform and back.
-				SpawnBlock(World, FVector(S * IslandDist, 0.f, IslandTop - 60.f), FVector(500.f, 500.f, 60.f), IslandColor);
-				SpawnBlock(World, FVector(0.f, S * IslandDist, IslandTop - 60.f), FVector(500.f, 500.f, 60.f), IslandColor);
+				SpawnBlock(World, FVector(S * IslandDist, 0.f, IslandTop - 60.f), FVector(500.f, 500.f, 60.f), IslandStyle);
+				SpawnBlock(World, FVector(0.f, S * IslandDist, IslandTop - 60.f), FVector(500.f, 500.f, 60.f), IslandStyle);
 				SpawnJumpPad(World, FVector(S * 700.f, 0.f, 0.f), FVector(S * IslandDist, 0.f, IslandTop));
 				SpawnJumpPad(World, FVector(0.f, S * 700.f, 0.f), FVector(0.f, S * IslandDist, IslandTop));
 				SpawnJumpPad(World, FVector(S * (IslandDist - 350.f), 0.f, IslandTop), FVector(S * 300.f, 0.f, 0.f));
@@ -235,16 +238,16 @@ namespace
 				for (const float Y : { -1.f, 1.f })
 				{
 					// Lower corner platforms: a bhop gap from the main platform, pads up to the high one.
-					SpawnBlock(World, FVector(X * CornerDist, Y * CornerDist, CornerTop - 40.f), FVector(350.f, 350.f, 40.f), IslandColor);
+					SpawnBlock(World, FVector(X * CornerDist, Y * CornerDist, CornerTop - 40.f), FVector(350.f, 350.f, 40.f), IslandStyle);
 					SpawnJumpPad(World, FVector(X * (CornerDist + 150.f), Y * (CornerDist + 150.f), CornerTop), FVector(X * 150.f, Y * 150.f, HighTop));
 				}
 			}
 
 			// High platform over the centre, and a few floating cover blocks.
-			SpawnBlock(World, FVector(0.f, 0.f, HighTop - 40.f), FVector(350.f, 350.f, 40.f), StoneColor);
+			SpawnBlock(World, FVector(0.f, 0.f, HighTop - 40.f), FVector(350.f, 350.f, 40.f), StoneStyle);
 			for (const float S : { -1.f, 1.f })
 			{
-				SpawnBlock(World, FVector(S * 450.f, S * -450.f, 120.f), FVector(90.f, 90.f, 120.f), PillarColor);
+				SpawnBlock(World, FVector(S * 450.f, S * -450.f, 120.f), FVector(90.f, 90.f, 120.f), PillarStyle);
 			}
 		}
 
@@ -316,28 +319,28 @@ namespace
 			for (const float S : { -1.f, 1.f })
 			{
 				// Floors either side of the valley, and ramps down into it (26 degrees, walkable).
-				SpawnBlock(World, FVector(S * 3000.f, 0.f, -50.f), FVector(1500.f, HalfWidth, 50.f), SandColor);
-				SpawnRamp(World, FVector(S * 700.f, 0.f, ValleyDepth), FVector(S * 1500.f, 0.f, 0.f), HalfWidth * 2.f, SandColor);
+				SpawnBlock(World, FVector(S * 3000.f, 0.f, -50.f), FVector(1500.f, HalfWidth, 50.f), SandStyle);
+				SpawnRamp(World, FVector(S * 700.f, 0.f, ValleyDepth), FVector(S * 1500.f, 0.f, 0.f), HalfWidth * 2.f, SandStyle);
 
 				// Raised bases at the ends, with a ramp and two jump pads up.
-				SpawnBlock(World, FVector(S * (BaseInner + 650.f), 0.f, BaseTop * 0.5f), FVector(650.f, HalfWidth, BaseTop * 0.5f), CliffColor);
-				SpawnRamp(World, FVector(S * 2400.f, 0.f, 0.f), FVector(S * BaseInner, 0.f, BaseTop), 700.f, CliffColor);
+				SpawnBlock(World, FVector(S * (BaseInner + 650.f), 0.f, BaseTop * 0.5f), FVector(650.f, HalfWidth, BaseTop * 0.5f), CliffStyle);
+				SpawnRamp(World, FVector(S * 2400.f, 0.f, 0.f), FVector(S * BaseInner, 0.f, BaseTop), 700.f, CliffStyle);
 				SpawnJumpPad(World, FVector(S * 2700.f, 900.f, 0.f), FVector(S * 3850.f, 900.f, BaseTop), 300.f);
 				SpawnJumpPad(World, FVector(S * 2700.f, -900.f, 0.f), FVector(S * 3850.f, -900.f, BaseTop), 300.f);
 
 				// Walls.
-				SpawnBlock(World, FVector(0.f, S * (HalfWidth + 50.f), 350.f), FVector(HalfLength + 50.f, 50.f, 850.f), WallColor);
-				SpawnBlock(World, FVector(S * (HalfLength + 50.f), 0.f, 350.f), FVector(50.f, HalfWidth + 100.f, 850.f), WallColor);
+				SpawnBlock(World, FVector(0.f, S * (HalfWidth + 50.f), 350.f), FVector(HalfLength + 50.f, 50.f, 850.f), WallStyle);
+				SpawnBlock(World, FVector(S * (HalfLength + 50.f), 0.f, 350.f), FVector(50.f, HalfWidth + 100.f, 850.f), WallStyle);
 
 				// Cover.
-				SpawnBlock(World, FVector(S * 2200.f, 800.f, 400.f), FVector(120.f, 120.f, 400.f), PillarColor);
-				SpawnBlock(World, FVector(S * 2200.f, -800.f, 400.f), FVector(120.f, 120.f, 400.f), PillarColor);
-				SpawnBlock(World, FVector(0.f, S * 800.f, ValleyDepth + 300.f), FVector(100.f, 100.f, 300.f), PillarColor);
+				SpawnBlock(World, FVector(S * 2200.f, 800.f, 400.f), FVector(120.f, 120.f, 400.f), PillarStyle);
+				SpawnBlock(World, FVector(S * 2200.f, -800.f, 400.f), FVector(120.f, 120.f, 400.f), PillarStyle);
+				SpawnBlock(World, FVector(0.f, S * 800.f, ValleyDepth + 300.f), FVector(100.f, 100.f, 300.f), PillarStyle);
 			}
 
 			// Valley floor and the bridge over it.
-			SpawnBlock(World, FVector(0.f, 0.f, ValleyDepth - 50.f), FVector(700.f, HalfWidth, 50.f), SandColor);
-			SpawnBlock(World, FVector(0.f, 0.f, -25.f), FVector(1500.f, 200.f, 25.f), BridgeColor);
+			SpawnBlock(World, FVector(0.f, 0.f, ValleyDepth - 50.f), FVector(700.f, HalfWidth, 50.f), SandStyle);
+			SpawnBlock(World, FVector(0.f, 0.f, -25.f), FVector(1500.f, 200.f, 25.f), BridgeStyle);
 		}
 
 		FArenaMapDef Make()
@@ -393,21 +396,63 @@ namespace
 			Sun->FinishSpawning(SunTransform);
 		}
 
+		// Weak shadowless fill from the other side, standing in for bounce light so
+		// shadowed walls and players stay readable.
+		const FTransform FillTransform(FRotator(-30.f, 215.f, 0.f));
+		ADirectionalLight* Fill = World->SpawnActorDeferred<ADirectionalLight>(ADirectionalLight::StaticClass(), FillTransform);
+		if (Fill)
+		{
+			if (UDirectionalLightComponent* FillLight = Cast<UDirectionalLightComponent>(Fill->GetLightComponent()))
+			{
+				FillLight->SetMobility(EComponentMobility::Movable);
+				FillLight->SetIntensity(2.5f);
+				FillLight->SetLightColor(FLinearColor(0.75f, 0.85f, 1.f));
+				FillLight->SetCastShadows(false);
+				FillLight->SetSpecularScale(0.25f);
+				FillLight->SetAtmosphereSunLight(false);
+			}
+			Fill->FinishSpawning(FillTransform);
+		}
+
 		World->SpawnActor<ASkyAtmosphere>();
 
+		// Ambient light from the engine's daylight cubemap. (Real-time capture of the
+		// sky atmosphere left shadowed faces black in our runtime-spawned scenes.)
 		ASkyLight* Sky = World->SpawnActorDeferred<ASkyLight>(ASkyLight::StaticClass(), FTransform::Identity);
 		if (Sky)
 		{
-			if (USkyLightComponent* SkyLight = Sky->GetLightComponent())
+			USkyLightComponent* SkyLight = Sky->GetLightComponent();
+			if (SkyLight)
 			{
 				SkyLight->SetMobility(EComponentMobility::Movable);
-				SkyLight->bRealTimeCapture = true;
-				SkyLight->SetIntensity(1.5f);
+				SkyLight->SourceType = ESkyLightSourceType::SLS_SpecifiedCubemap;
+				SkyLight->SetCubemap(LoadObject<UTextureCube>(nullptr, TEXT("/Engine/MapTemplates/Sky/DaylightAmbientCubemap.DaylightAmbientCubemap")));
+				SkyLight->SetIntensity(1.f);
+				SkyLight->bLowerHemisphereIsBlack = false;
 			}
 			Sky->FinishSpawning(FTransform::Identity);
+			if (SkyLight)
+			{
+				SkyLight->RecaptureSky();
+			}
 		}
 
 		World->SpawnActor<AExponentialHeightFog>(FVector(0.f, 0.f, -500.f), FRotator::ZeroRotator);
+
+		// A touch darker and more saturated than auto exposure alone, so colours read.
+		if (APostProcessVolume* Post = World->SpawnActor<APostProcessVolume>())
+		{
+			Post->bUnbound = true;
+			FPostProcessSettings& Settings = Post->Settings;
+			Settings.bOverride_AutoExposureBias = true;
+			Settings.AutoExposureBias = -0.4f;
+			Settings.bOverride_ColorSaturation = true;
+			Settings.ColorSaturation = FVector4(1.12f, 1.12f, 1.12f, 1.f);
+			Settings.bOverride_BloomIntensity = true;
+			Settings.BloomIntensity = 0.6f;
+			Settings.bOverride_VignetteIntensity = true;
+			Settings.VignetteIntensity = 0.3f;
+		}
 	}
 }
 
@@ -455,11 +500,12 @@ AArenaBlock::AArenaBlock()
 	RootComponent = Mesh;
 }
 
-void AArenaBlock::Init(const FVector& HalfExtent, const FLinearColor& Color)
+void AArenaBlock::Init(const FVector& HalfExtent, const FArenaSurfaceStyle& Style)
 {
 	Mesh->SetStaticMesh(ArenaVisuals::Cube());
 	SetActorScale3D(HalfExtent / 50.f); // Cube mesh is 100 cm across.
-	ArenaVisuals::SetColor(Mesh, Color);
+	// The material textures in world space, so any block size tiles evenly.
+	Mesh->SetMaterial(0, ArenaVisuals::SurfaceMaterial(Style));
 }
 
 // ---------------------------------------------------------------------------
@@ -483,16 +529,16 @@ AArenaJumpPad::AArenaJumpPad()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetupAttachment(Trigger);
 	ArenaVisuals::SetupCosmeticMesh(Mesh, nullptr);
-	Mesh->SetRelativeLocation(FVector(0.f, 0.f, -35.f));
-	Mesh->SetRelativeScale3D(FVector(1.6f, 1.6f, 0.1f));
+	Mesh->SetCastShadow(false);
 }
 
 void AArenaJumpPad::Init(const FVector& InLaunchVelocity, const FVector& InTarget)
 {
 	LaunchVelocity = InLaunchVelocity;
 	Target = InTarget;
-	Mesh->SetStaticMesh(ArenaVisuals::Cylinder());
-	ArenaVisuals::SetColor(Mesh, PadColor);
+	Mesh->SetStaticMesh(ArenaVisuals::ArtMesh(TEXT("SM_JumpPad")));
+	ArenaVisuals::SetPropColors(Mesh, PadColor, PadColor);
+	ArenaVisuals::SetGlowParam(Mesh, TEXT("Pulse"), 0.4f);
 	Trigger->OnComponentBeginOverlap.AddDynamic(this, &AArenaJumpPad::OnOverlap);
 }
 

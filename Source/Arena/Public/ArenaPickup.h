@@ -48,6 +48,10 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
+	/** Pedestal on the floor; its ring glows while the item is there. */
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UStaticMeshComponent> Base;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Type)
 	EArenaPickupType Type = EArenaPickupType::Health;
 
@@ -57,4 +61,6 @@ protected:
 private:
 	FTimerHandle RespawnTimer;
 	float SpinTime = 0.f;
+	/** Offset that keeps the model spinning about its middle rather than its origin. */
+	FVector SpinPivot = FVector::ZeroVector;
 };

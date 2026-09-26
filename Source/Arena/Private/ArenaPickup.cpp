@@ -4,6 +4,7 @@
 #include "ArenaVisuals.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 
@@ -25,6 +26,12 @@ AArenaPickup::AArenaPickup()
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetupAttachment(Trigger);
 	ArenaVisuals::SetupCosmeticMesh(Mesh, nullptr);
+
+	// Items float Hover (50 cm) above the floor; the pedestal sits on it.
+	Base = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Base"));
+	Base->SetupAttachment(Trigger);
+	ArenaVisuals::SetupCosmeticMesh(Base, nullptr);
+	Base->SetRelativeLocation(FVector(0.f, 0.f, -50.f));
 }
 
 void AArenaPickup::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -52,36 +59,44 @@ void AArenaPickup::BeginPlay()
 
 void AArenaPickup::OnRep_Type()
 {
-	UStaticMesh* Shape = ArenaVisuals::Cube();
-	FVector Scale(0.4f);
-	FLinearColor Color = FLinearColor::White;
+	const TCHAR* Model = TEXT("SM_Ammo");
+	float Scale = 1.3f;
+	FLinearColor Accent = FLinearColor::White;
+	FLinearColor Glow = FLinearColor::White;
 	switch (Type)
 	{
-	case EArenaPickupType::Health:         Shape = ArenaVisuals::Sphere(); Scale = FVector(0.45f); Color = FLinearColor(0.2f, 0.9f, 0.2f); break;
-	case EArenaPickupType::MegaHealth:     Shape = ArenaVisuals::Sphere(); Scale = FVector(0.8f);  Color = FLinearColor(0.2f, 0.4f, 1.0f); break;
-	case EArenaPickupType::Armor:          Scale = FVector(0.5f, 0.5f, 0.6f);                      Color = FLinearColor(1.0f, 0.85f, 0.1f); break;
-	case EArenaPickupType::HeavyArmor:     Scale = FVector(0.7f, 0.7f, 0.8f);                      Color = FLinearColor(1.0f, 0.1f, 0.1f); break;
-	case EArenaPickupType::Ammo:           Scale = FVector(0.3f);                                  Color = FLinearColor(0.7f, 0.6f, 0.3f); break;
+	case EArenaPickupType::Health:     Model = TEXT("SM_Health");     Accent = FLinearColor(0.15f, 0.7f, 0.15f); Glow = FLinearColor(0.8f, 1.f, 0.8f); break;
+	case EArenaPickupType::MegaHealth: Model = TEXT("SM_MegaHealth"); Accent = FLinearColor(0.8f, 0.8f, 0.9f);  Glow = FLinearColor(0.2f, 0.4f, 1.f); break;
+	case EArenaPickupType::Armor:      Model = TEXT("SM_Armor");      Accent = FLinearColor(0.9f, 0.7f, 0.1f);  Glow = FLinearColor(1.f, 0.85f, 0.2f); break;
+	case EArenaPickupType::HeavyArmor: Model = TEXT("SM_Armor");      Accent = FLinearColor(0.8f, 0.08f, 0.06f); Glow = FLinearColor(1.f, 0.2f, 0.1f); Scale = 1.6f; break;
+	case EArenaPickupType::Ammo:       Model = TEXT("SM_Ammo");       Accent = FLinearColor(0.7f, 0.55f, 0.25f); Glow = FLinearColor(1.f, 0.8f, 0.3f); break;
 	default:
-	{
-		// Weapons: a long bar in the weapon's colour.
-		EArenaWeapon Weapon;
-		if (GetPickupWeapon(Type, Weapon))
-		{
-			Scale = FVector(0.9f, 0.18f, 0.18f);
-			Color = GetWeaponInfo(Weapon).Color;
-		}
 		break;
 	}
+
+	UStaticMesh* Shape = ArenaVisuals::ArtMesh(Model);
+	EArenaWeapon Weapon;
+	if (GetPickupWeapon(Type, Weapon))
+	{
+		Shape = ArenaVisuals::WeaponMesh(Weapon);
+		Accent = Glow = GetWeaponInfo(Weapon).Color;
+		Scale = 1.1f;
 	}
+	Mesh->EmptyOverrideMaterials();
 	Mesh->SetStaticMesh(Shape);
-	Mesh->SetRelativeScale3D(Scale);
-	ArenaVisuals::SetColor(Mesh, Color);
+	Mesh->SetRelativeScale3D(FVector(Scale));
+	ArenaVisuals::SetPropColors(Mesh, Accent, Glow);
+	SpinPivot = Shape ? Shape->GetBounds().Origin * Scale : FVector::ZeroVector;
+
+	Base->SetStaticMesh(ArenaVisuals::ArtMesh(TEXT("SM_ItemBase")));
+	ArenaVisuals::SetPropColors(Base, Glow, Glow);
+	ArenaVisuals::SetGlowParam(Base, TEXT("Emissive"), bAvailable ? 10.f : 0.5f);
 }
 
 void AArenaPickup::OnRep_Available()
 {
 	Mesh->SetVisibility(bAvailable);
+	ArenaVisuals::SetGlowParam(Base, TEXT("Emissive"), bAvailable ? 10.f : 0.5f);
 
 	// Skip the initial replication when joining a game with items already taken.
 	if (!bAvailable && GetGameTimeSinceCreation() > 1.f)
@@ -97,8 +112,9 @@ void AArenaPickup::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	SpinTime += DeltaSeconds;
-	Mesh->SetRelativeRotation(FRotator(0.f, SpinTime * 90.f, 0.f));
-	Mesh->SetRelativeLocation(FVector(0.f, 0.f, FMath::Sin(SpinTime * 2.f) * 8.f));
+	const FRotator Spin(0.f, SpinTime * 90.f, 0.f);
+	Mesh->SetRelativeRotation(Spin);
+	Mesh->SetRelativeLocation(FVector(0.f, 0.f, FMath::Sin(SpinTime * 2.f) * 8.f) - Spin.RotateVector(SpinPivot));
 }
 
 void AArenaPickup::OnOverlap(UPrimitiveComponent* OverlappedComp, AActor* Other, UPrimitiveComponent* OtherComp, int32 BodyIndex, bool bFromSweep, const FHitResult& Sweep)

@@ -7,3 +7,5 @@ DerivedDataCache/
 *.suo
 *.VC.db
 *.opendb
+
+SourceArt/

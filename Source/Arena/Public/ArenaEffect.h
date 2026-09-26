@@ -4,9 +4,11 @@
 #include "GameFramework/Actor.h"
 #include "ArenaEffect.generated.h"
 
+class UMaterialInstanceDynamic;
+class UPointLightComponent;
 class UStaticMeshComponent;
 
-/** Local-only cosmetic actor (beam or blast) that scales itself out and dies. */
+/** Local-only cosmetic actor (beam or blast) that glows, fades out and dies. */
 UCLASS(NotPlaceable, Transient)
 class ARENA_API AArenaEffect : public AActor
 {
@@ -24,8 +26,16 @@ private:
 	UPROPERTY()
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
+	/** Only explosions light up their surroundings. */
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> Light;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> Material;
+
 	FVector StartScale = FVector::OneVector;
 	FVector EndScale = FVector::ZeroVector;
 	float Duration = 0.5f;
 	float Age = 0.f;
+	float LightIntensity = 0.f;
 };

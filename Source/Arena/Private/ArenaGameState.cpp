@@ -126,6 +126,7 @@ void AArenaGameState::MulticastShot_Implementation(AArenaCharacter* Shooter, EAr
 	if (!Shooter->IsLocalPlayerView())
 	{
 		UArenaAudio::PlayAt(this, GetWeaponInfo(Weapon).FireSound, Shooter->GetMuzzleLocation(), 1.f, FMath::FRandRange(0.97f, 1.03f));
+		Shooter->PlayFireEffects();
 	}
 	if (!(Shooter->IsLocallyControlled() && !Shooter->HasAuthority()))
 	{
