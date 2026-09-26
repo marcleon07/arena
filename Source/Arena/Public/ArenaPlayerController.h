@@ -67,6 +67,13 @@ public:
 	UFUNCTION(Exec)
 	void AirAccel(float Value);
 
+	/** Host only: add a bot (optional skill 1-5) / remove the last one. */
+	UFUNCTION(Exec)
+	void AddBot(int32 Skill = 0);
+
+	UFUNCTION(Exec)
+	void RemoveBot();
+
 	UPROPERTY(Transient)
 	TObjectPtr<UInputMappingContext> MappingContext;
 

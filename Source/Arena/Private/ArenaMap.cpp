@@ -79,7 +79,7 @@ namespace
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 		if (AArenaJumpPad* Pad = World->SpawnActor<AArenaJumpPad>(FloorLocation, FRotator::ZeroRotator, Params))
 		{
-			Pad->Init(SolveLaunch(From, To, ApexAbove));
+			Pad->Init(SolveLaunch(From, To, ApexAbove), TargetFloor);
 		}
 	}
 
@@ -487,9 +487,10 @@ AArenaJumpPad::AArenaJumpPad()
 	Mesh->SetRelativeScale3D(FVector(1.6f, 1.6f, 0.1f));
 }
 
-void AArenaJumpPad::Init(const FVector& InLaunchVelocity)
+void AArenaJumpPad::Init(const FVector& InLaunchVelocity, const FVector& InTarget)
 {
 	LaunchVelocity = InLaunchVelocity;
+	Target = InTarget;
 	Mesh->SetStaticMesh(ArenaVisuals::Cylinder());
 	ArenaVisuals::SetColor(Mesh, PadColor);
 	Trigger->OnComponentBeginOverlap.AddDynamic(this, &AArenaJumpPad::OnOverlap);

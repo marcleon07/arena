@@ -26,7 +26,8 @@ which are synthesized by a script (see [Sounds](#sounds)).
 Launching the game normally (double-click a packaged build, or **Play → Standalone
 Game** in the editor) opens the **main menu** over a slow camera orbit of the arena:
 
-- **Host Game**: pick a map, a frag limit and a time limit, then start a listen server that friends can join.
+- **Host Game**: pick a map, frag limit, time limit, number of bots and bot skill,
+  then start a listen server that friends can join.
 - **Join Game**: enter an IP (or `IP:port`). The last address is remembered.
 - **Settings** has two tabs:
   - **General**: player name, mouse sensitivity, invert mouse, field of view, volume,
@@ -61,6 +62,32 @@ with the same limits. `VoteDuration` in `Config/DefaultGame.ini` changes the tim
 Maps are defined in code in `ArenaMap.cpp` (`FArenaMapDef`: geometry, spawns, items,
 kill height, menu camera). Every map loads on the same engine level; the server picks
 one with the `Arena` URL option and replicates the choice.
+
+## Bots
+
+Bots fill out matches when there aren't enough people: set the count (0–15) and
+skill (1–5) on the Host page, pass `?Bots=4?BotSkill=3` on the URL, or use the console
+during a match as the host: `addbot` (optional skill, e.g. `addbot 5`) and `removebot`.
+They carry over to the next map after a vote, and a dedicated server with bots starts
+a match without waiting for a human.
+
+- **Navigation:** the maps are built at runtime, so there's no baked navmesh. When a
+  bot first needs to move, the server probes the geometry and builds a waypoint graph:
+  walkable surfaces on every level, links checked step by step for ground, step height,
+  slope and walls (safe drops are one-way), plus jump pad arcs. It takes 10–30 ms per map.
+- **Combat:** a bot picks the nearest enemy it can see, waits out a reaction time,
+  chooses a weapon for the range, then aims with some error and a limited turn speed.
+  It leads projectiles and aims rockets at the feet. It strafes and dodge-jumps, keeps
+  a range suited to its weapon, and checks for ground ahead (scaled to its speed) so it
+  doesn't strafe off Skyline.
+- **Items:** outside a fight, and during one when it only has the machinegun or is
+  hurt, a bot goes for whatever helps most: health when low, armor, weapons it lacks,
+  ammo. Otherwise it hunts the last enemy it saw, or roams.
+- **Skill** sets reaction time (0.65 s → 0.12 s), aim error (7° → 0.8°) and turn speed.
+  Skill 4 and up also hop along long straight paths.
+
+Bots drive their character through the same inputs a player has (movement, aim,
+jump, fire), so they move with the same GoldSrc physics.
 
 ## Play outside the editor
 
@@ -104,6 +131,7 @@ Defaults; all of them except the menu and console keys can be changed in
 | `sens 2.5` | Quake-style sensitivity (0.022° per mouse count × value) |
 | `fov 110` | Field of view |
 | `airaccel 100` | Sets the server's `sv_airaccelerate` (10 = HL1, 100 = CS 1.6 surf/bhop servers) |
+| `addbot [skill]` / `removebot` | Host only: add a bot (skill 1–5) or remove the last one |
 | `setname Frag` | Change your name for this match (set it permanently in Settings) |
 
 ## How the movement works
@@ -183,6 +211,8 @@ sound is skipped with a log warning.
 | `ArenaGameState` | Replicated match state, `sv_airaccelerate`, effect multicasts, kill feed |
 | `ArenaMap` | The map registry: each map's geometry, jump pads, spawns and items, plus lighting |
 | `SArenaMapVote` | End-of-match map vote cards |
+| `ArenaBotController` | Bot brain: targeting, aim, weapon choice, combat movement, item goals |
+| `ArenaBotNav` | Runtime waypoint graph and A* pathfinding for bots |
 | `ArenaProjectile` | Rocket, grenade and plasma projectiles (direct + splash damage) |
 | `ArenaPickup` | Health, armor, weapon and ammo items |
 | `ArenaHUD` | Canvas HUD, scoreboard, hit markers, damage numbers and indicators |

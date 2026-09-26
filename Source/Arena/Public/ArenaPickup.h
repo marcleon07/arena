@@ -20,6 +20,9 @@ public:
 	/** Server: must be called right after spawning. */
 	void InitPickup(EArenaPickupType InType);
 
+	bool IsAvailable() const { return bAvailable; }
+	EArenaPickupType GetPickupType() const { return Type; }
+
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

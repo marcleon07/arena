@@ -34,7 +34,10 @@ class ARENA_API AArenaJumpPad : public AActor
 
 public:
 	AArenaJumpPad();
-	void Init(const FVector& InLaunchVelocity);
+	void Init(const FVector& InLaunchVelocity, const FVector& InTarget);
+
+	/** Where the pad lands you (feet position). */
+	FVector GetTarget() const { return Target; }
 
 private:
 	UFUNCTION()
@@ -47,6 +50,7 @@ private:
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
 	FVector LaunchVelocity = FVector::ZeroVector;
+	FVector Target = FVector::ZeroVector;
 };
 
 struct FArenaPickupSpot

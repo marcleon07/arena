@@ -1,5 +1,6 @@
 #include "ArenaGameMode.h"
 #include "Arena.h"
+#include "ArenaBotController.h"
 #include "ArenaCharacter.h"
 #include "ArenaGameState.h"
 #include "ArenaHUD.h"
@@ -32,6 +33,8 @@ void AArenaGameMode::InitGame(const FString& MapName, const FString& Options, FS
 	FragLimit = UGameplayStatics::GetIntOption(Options, TEXT("FragLimit"), FragLimit);
 	TimeLimitMinutes = UGameplayStatics::GetIntOption(Options, TEXT("TimeLimit"), FMath::RoundToInt(TimeLimitMinutes));
 	MapId = ArenaMap::Get(FName(*UGameplayStatics::ParseOption(Options, TEXT("Arena")))).Id;
+	BotCount = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("Bots"), BotCount), 0, 15);
+	BotSkill = FMath::Clamp(UGameplayStatics::GetIntOption(Options, TEXT("BotSkill"), BotSkill), 1, 5);
 	UE_LOG(LogArena, Log, TEXT("Arena map: %s"), *MapId.ToString());
 
 	if (AArenaGameState* GS = GetGameState<AArenaGameState>())
@@ -78,6 +81,14 @@ void AArenaGameMode::HandleMatchHasStarted()
 		GS->MatchEndTime = bTimed ? GetWorld()->GetTimeSeconds() + TimeLimitMinutes * 60.f : 0.f;
 	}
 	Super::HandleMatchHasStarted();
+
+	if (!AArenaGameState::IsMenuWorld(GetWorld()))
+	{
+		for (int32 i = 0; i < BotCount; ++i)
+		{
+			AddBot(BotSkill);
+		}
+	}
 }
 
 void AArenaGameMode::PostLogin(APlayerController* NewPlayer)
@@ -153,6 +164,13 @@ void AArenaGameMode::Tick(float DeltaSeconds)
 			TryRespawn(PC, false);
 		}
 	}
+	for (AArenaBotController* Bot : Bots)
+	{
+		if (Bot && !Bot->GetPawn() && GetWorld()->GetTimeSeconds() - Bot->DeathTime >= AutoRespawnDelay)
+		{
+			RestartPlayer(Bot);
+		}
+	}
 
 	const AArenaGameState* GS = GetGameState<AArenaGameState>();
 	if (GS && GS->MatchEndTime > 0.f && GetWorld()->GetTimeSeconds() >= GS->MatchEndTime)
@@ -166,6 +184,16 @@ bool AArenaGameMode::PlayerCanRestart_Implementation(APlayerController* Player)
 {
 	// The main menu world has no players in it, just the orbiting camera.
 	return !AArenaGameState::IsMenuWorld(GetWorld()) && Super::PlayerCanRestart_Implementation(Player);
+}
+
+bool AArenaGameMode::ReadyToStartMatch_Implementation()
+{
+	// AGameMode waits for a human; a match with bots can start without one.
+	if (GetMatchState() == MatchState::WaitingToStart && BotCount > 0 && !AArenaGameState::IsMenuWorld(GetWorld()))
+	{
+		return true;
+	}
+	return Super::ReadyToStartMatch_Implementation();
 }
 
 void AArenaGameMode::TryRespawn(AArenaPlayerController* PC, bool bRequested)
@@ -209,6 +237,9 @@ void AArenaGameMode::OnPlayerKilled(AController* Killer, AController* Victim, EA
 	{
 		++KillerPS->Frags;
 	}
+
+	UE_LOG(LogArena, Log, TEXT("Kill: %s -> %s (%s)"), KillerPS ? *KillerPS->GetPlayerName() : TEXT("world"),
+		VictimPS ? *VictimPS->GetPlayerName() : TEXT("?"), Weapon == EArenaWeapon::Count ? TEXT("fell") : GetWeaponInfo(Weapon).Name);
 
 	if (AArenaGameState* GS = GetGameState<AArenaGameState>())
 	{
@@ -342,7 +373,100 @@ void AArenaGameMode::FinishMapVote()
 	}
 
 	UE_LOG(LogArena, Log, TEXT("Next map: %s"), *NextMap.ToString());
-	const FString URL = FString::Printf(TEXT("/Engine/Maps/Entry?Arena=%s?FragLimit=%d?TimeLimit=%d%s"),
-		*NextMap.ToString(), FragLimit, FMath::RoundToInt(TimeLimitMinutes), GetNetMode() == NM_ListenServer ? TEXT("?listen") : TEXT(""));
+	const FString URL = FString::Printf(TEXT("/Engine/Maps/Entry?Arena=%s?FragLimit=%d?TimeLimit=%d?Bots=%d?BotSkill=%d%s"),
+		*NextMap.ToString(), FragLimit, FMath::RoundToInt(TimeLimitMinutes), Bots.Num(), BotSkill,
+		GetNetMode() == NM_ListenServer ? TEXT("?listen") : TEXT(""));
 	GetWorld()->ServerTravel(URL, true);
+}
+
+// ---------------------------------------------------------------------------
+// Bots
+// ---------------------------------------------------------------------------
+
+bool AArenaGameMode::AddBot(int32 Skill)
+{
+	const int32 Humans = GetNumPlayers();
+	if (Humans + Bots.Num() >= 16)
+	{
+		return false;
+	}
+
+	static const TCHAR* Names[] =
+	{
+		TEXT("Ajax"), TEXT("Blitz"), TEXT("Cinder"), TEXT("Dagger"), TEXT("Echo"), TEXT("Flux"), TEXT("Grit"), TEXT("Havoc"),
+		TEXT("Ion"), TEXT("Jolt"), TEXT("Kite"), TEXT("Lynx"), TEXT("Mako"), TEXT("Nova"), TEXT("Onyx"), TEXT("Pike"),
+	};
+	FString Name = FString::Printf(TEXT("Bot%d"), Bots.Num() + 1);
+	for (const TCHAR* Candidate : Names)
+	{
+		if (!Bots.ContainsByPredicate([Candidate](const AArenaBotController* Bot)
+			{
+				return Bot && Bot->PlayerState && Bot->PlayerState->GetPlayerName() == Candidate;
+			}))
+		{
+			Name = Candidate;
+			break;
+		}
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	AArenaBotController* Bot = GetWorld()->SpawnActor<AArenaBotController>(Params);
+	if (!Bot)
+	{
+		return false;
+	}
+	Bot->InitBot(Skill > 0 ? Skill : BotSkill);
+	if (AArenaPlayerState* PS = Bot->GetPlayerState<AArenaPlayerState>())
+	{
+		PS->ColorIndex = NextColorIndex++;
+	}
+	ChangeName(Bot, Name, false);
+	Bots.Add(Bot);
+	++NumBots;
+
+	if (IsMatchInProgress())
+	{
+		RestartPlayer(Bot);
+	}
+	UE_LOG(LogArena, Log, TEXT("Added bot %s (skill %d)"), *Name, Bot->GetSkill());
+	return true;
+}
+
+void AArenaGameMode::RemoveBot()
+{
+	if (Bots.Num() == 0)
+	{
+		return;
+	}
+	AArenaBotController* Bot = Bots.Pop();
+	--NumBots;
+	if (Bot)
+	{
+		if (APawn* Pawn = Bot->GetPawn())
+		{
+			Pawn->Destroy();
+		}
+		Bot->Destroy();
+	}
+}
+
+const FArenaBotNav* AArenaGameMode::GetBotNav()
+{
+	if (!BotNav.IsBuilt())
+	{
+		// Items and spawns become nodes too, so bots can path right onto them.
+		TArray<FVector> Extra;
+		const FArenaMapDef& Map = ArenaMap::Get(MapId);
+		for (const FTransform& Spawn : Map.Spawns)
+		{
+			Extra.Add(Spawn.GetLocation());
+		}
+		for (const FArenaPickupSpot& Spot : Map.Pickups)
+		{
+			Extra.Add(Spot.Location);
+		}
+		BotNav.Build(GetWorld(), Extra);
+	}
+	return &BotNav;
 }

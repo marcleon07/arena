@@ -2,15 +2,17 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameMode.h"
+#include "ArenaBotNav.h"
 #include "ArenaTypes.h"
 #include "ArenaGameMode.generated.h"
 
+class AArenaBotController;
 class AArenaPlayerController;
 class AArenaPlayerState;
 
 /**
  * Free-for-all deathmatch. Options on the URL override config, e.g.
- *   open /Engine/Maps/Entry?listen?Arena=Skyline?FragLimit=30?TimeLimit=15
+ *   open /Engine/Maps/Entry?listen?Arena=Skyline?FragLimit=30?TimeLimit=15?Bots=4?BotSkill=3
  * When a match ends, players vote on the next map for VoteDuration seconds.
  */
 UCLASS(Config = Game)
@@ -29,6 +31,7 @@ public:
 	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 	virtual bool ShouldSpawnAtStartSpot(AController* Player) override { return false; }
 	virtual bool PlayerCanRestart_Implementation(APlayerController* Player) override;
+	virtual bool ReadyToStartMatch_Implementation() override;
 
 	void OnPlayerKilled(AController* Killer, AController* Victim, EArenaWeapon Weapon);
 
@@ -36,6 +39,14 @@ public:
 	void CastVote(APlayerController* Voter, FName Map);
 
 	FName GetMapId() const { return MapId; }
+
+	/** Adds a bot (skill 1-5; <= 0 uses BotSkill). Returns false if the server is full. */
+	bool AddBot(int32 Skill = 0);
+	void RemoveBot();
+	int32 GetNumBots() const { return Bots.Num(); }
+
+	/** Waypoint graph for bots, built on first use for the current map. */
+	const FArenaBotNav* GetBotNav();
 
 	/** Respawns a dead player once AutoRespawnDelay (or ClickRespawnDelay if bRequested) has passed. */
 	void TryRespawn(AArenaPlayerController* PC, bool bRequested);
@@ -52,6 +63,14 @@ public:
 
 	UPROPERTY(Config)
 	float ClickRespawnDelay = 1.f;
+
+	/** Bots added when a match starts (URL option Bots=N). */
+	UPROPERTY(Config)
+	int32 BotCount = 0;
+
+	/** 1 (easy) to 5 (hard); URL option BotSkill=N. */
+	UPROPERTY(Config)
+	int32 BotSkill = 3;
 
 	/** Seconds the end-of-match scoreboard and map vote stay up. */
 	UPROPERTY(Config)
@@ -70,6 +89,11 @@ protected:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AActor>> SpawnPoints;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AArenaBotController>> Bots;
+
+	FArenaBotNav BotNav;
 
 private:
 	FName MapId;

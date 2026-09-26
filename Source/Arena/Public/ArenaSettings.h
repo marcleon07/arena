@@ -104,6 +104,12 @@ public:
 	UPROPERTY(Config)
 	int32 HostTimeLimit = 10;
 
+	UPROPERTY(Config)
+	int32 HostBots = 3;
+
+	UPROPERTY(Config)
+	int32 HostBotSkill = 3;
+
 private:
 	/** Empty until the user changes a key; then holds every action. */
 	UPROPERTY(Config)

@@ -396,7 +396,7 @@ void AArenaHUD::DrawScoreboard(const AArenaGameState* GS)
 		DrawText(PS->GetPlayerName(), TextColor, X + 50.f * UIScale, Y, Font, UIScale);
 		DrawText(FString::FromInt(PS->Frags), TextColor, X + 360.f * UIScale, Y, Font, UIScale);
 		DrawText(FString::FromInt(PS->Deaths), TextColor, X + 450.f * UIScale, Y, Font, UIScale);
-		DrawText(FString::FromInt(FMath::RoundToInt(PS->GetPingInMilliseconds())), TextColor, X + 550.f * UIScale, Y, Font, UIScale);
+		DrawText(PS->IsABot() ? FString(TEXT("BOT")) : FString::FromInt(FMath::RoundToInt(PS->GetPingInMilliseconds())), TextColor, X + 550.f * UIScale, Y, Font, UIScale);
 		Y += RowH;
 	}
 }
