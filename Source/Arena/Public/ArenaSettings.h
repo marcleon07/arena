@@ -107,6 +107,10 @@ public:
 	UPROPERTY(Config)
 	int32 HostBots = 3;
 
+	/** Steam: only friends can see and join (otherwise listed in Find Games). */
+	UPROPERTY(Config)
+	bool bHostFriendsOnly = false;
+
 	UPROPERTY(Config)
 	int32 HostBotSkill = 3;
 
