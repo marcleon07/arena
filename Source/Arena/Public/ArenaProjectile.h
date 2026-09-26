@@ -5,6 +5,7 @@
 #include "ArenaTypes.h"
 #include "ArenaProjectile.generated.h"
 
+class UPointLightComponent;
 class USphereComponent;
 class UStaticMeshComponent;
 class UProjectileMovementComponent;
@@ -44,6 +45,9 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	TObjectPtr<UProjectileMovementComponent> Movement;
 
+	UPROPERTY(VisibleAnywhere)
+	TObjectPtr<UPointLightComponent> Light;
+
 	// Tuning, set by subclasses.
 	EArenaWeapon Weapon = EArenaWeapon::RocketLauncher;
 	float DirectDamage = 100.f;
@@ -52,6 +56,8 @@ protected:
 	/** Seconds until it explodes by itself; 0 = only on impact. */
 	float FuseTime = 0.f;
 	FLinearColor Color = FLinearColor::White;
+	/** Model in /Game/Art/Meshes; none draws a glowing ball of Color. */
+	const TCHAR* Model = nullptr;
 	EArenaSound ExplodeSound = EArenaSound::RocketExplode;
 	float BlastScale = 0.8f;
 

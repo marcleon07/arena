@@ -4,13 +4,12 @@
 #include "ArenaGameState.h"
 #include "ArenaVisuals.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "TimerManager.h"
-#include "UObject/ConstructorHelpers.h"
 
 TSubclassOf<AArenaProjectile> AArenaProjectile::ClassForWeapon(EArenaWeapon Weapon)
 {
@@ -28,8 +27,6 @@ AArenaProjectile::AArenaProjectile()
 	SetReplicatingMovement(true);
 	InitialLifeSpan = 10.f;
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-
 	Collision = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
 	Collision->InitSphereRadius(8.f);
 	Collision->SetCollisionObjectType(ECC_WorldDynamic);
@@ -41,7 +38,15 @@ AArenaProjectile::AArenaProjectile()
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	Mesh->SetupAttachment(Collision);
-	ArenaVisuals::SetupCosmeticMesh(Mesh, SphereMesh.Object);
+	ArenaVisuals::SetupCosmeticMesh(Mesh, nullptr);
+	Mesh->SetCastShadow(false);
+
+	Light = CreateDefaultSubobject<UPointLightComponent>(TEXT("Light"));
+	Light->SetupAttachment(Collision);
+	Light->SetCastShadows(false);
+	Light->SetIntensityUnits(ELightUnits::Candelas);
+	Light->SetIntensity(30.f);
+	Light->SetAttenuationRadius(350.f);
 
 	Movement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("Movement"));
 	Movement->UpdatedComponent = Collision;
@@ -54,7 +59,32 @@ void AArenaProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ArenaVisuals::SetColor(Mesh, Color);
+	if (Model)
+	{
+		Mesh->SetStaticMesh(ArenaVisuals::ArtMesh(Model));
+		ArenaVisuals::SetPropColors(Mesh, Color, Color);
+	}
+	else
+	{
+		Mesh->SetStaticMesh(ArenaVisuals::Sphere());
+		ArenaVisuals::SetFX(Mesh, Color, 6.f, 1.f);
+	}
+	Light->SetLightColor(Color);
+	// Lit only once clear of the shooter: a light a few centimetres from their face
+	// would blow out the whole view.
+	if (Light->IsVisible())
+	{
+		Light->SetVisibility(false);
+		FTimerHandle LightTimer;
+		GetWorldTimerManager().SetTimer(LightTimer, FTimerDelegate::CreateWeakLambda(this, [this]
+		{
+			if (Mesh->IsVisible())
+			{
+				Light->SetVisibility(true);
+			}
+		}), 0.08f, false);
+	}
+
 	APawn* Shooter = GetInstigator();
 	if (Shooter)
 	{
@@ -62,10 +92,14 @@ void AArenaProjectile::BeginPlay()
 		ShooterController = Shooter->GetController();
 	}
 	// The shooter heard their own shot when they pulled the trigger.
-	const AArenaCharacter* ShooterCharacter = Cast<AArenaCharacter>(Shooter);
+	AArenaCharacter* ShooterCharacter = Cast<AArenaCharacter>(Shooter);
 	if (!ShooterCharacter || !ShooterCharacter->IsLocalPlayerView())
 	{
 		UArenaAudio::PlayAt(this, GetWeaponInfo(Weapon).FireSound, GetActorLocation());
+		if (ShooterCharacter)
+		{
+			ShooterCharacter->PlayFireEffects();
+		}
 	}
 
 	Movement->OnProjectileStop.AddDynamic(this, &AArenaProjectile::OnStop);
@@ -95,6 +129,7 @@ void AArenaProjectile::OnStop(const FHitResult& Hit)
 	{
 		// Clients wait for the server's explosion; just stop drawing the projectile.
 		Mesh->SetVisibility(false);
+		Light->SetVisibility(false);
 	}
 }
 
@@ -183,7 +218,7 @@ AArenaRocket::AArenaRocket()
 {
 	Weapon = EArenaWeapon::RocketLauncher;
 	Color = FLinearColor(1.f, 0.45f, 0.1f);
-	Mesh->SetRelativeScale3D(FVector(0.35f, 0.18f, 0.18f));
+	Model = TEXT("SM_Rocket");
 	Movement->InitialSpeed = Movement->MaxSpeed = QU(900.f);
 }
 
@@ -193,7 +228,8 @@ AArenaGrenade::AArenaGrenade()
 	SplashRadius = QU(150.f);
 	FuseTime = 2.5f;
 	Color = FLinearColor(0.2f, 0.45f, 0.1f);
-	Mesh->SetRelativeScale3D(FVector(0.22f));
+	Model = TEXT("SM_Grenade");
+	Light->SetVisibility(false);
 	Movement->InitialSpeed = Movement->MaxSpeed = QU(700.f);
 	Movement->ProjectileGravityScale = QU(800.f) / 980.f; // sv_gravity 800
 	Movement->bShouldBounce = true;
@@ -212,6 +248,8 @@ AArenaPlasma::AArenaPlasma()
 	ExplodeSound = EArenaSound::PlasmaExplode;
 	BlastScale = 1.5f;
 	Collision->InitSphereRadius(5.f);
-	Mesh->SetRelativeScale3D(FVector(0.16f));
+	Mesh->SetRelativeScale3D(FVector(0.14f));
+	Light->SetIntensity(15.f);
+	Light->SetAttenuationRadius(250.f);
 	Movement->InitialSpeed = Movement->MaxSpeed = QU(2000.f);
 }

@@ -1,4 +1,5 @@
 #include "ArenaGameMode.h"
+#include "ArenaShowcase.h"
 #include "Arena.h"
 #include "ArenaBotController.h"
 #include "ArenaCharacter.h"
@@ -57,6 +58,7 @@ void AArenaGameMode::StartPlay()
 {
 	Super::StartPlay();
 	SpawnPickups();
+	AArenaShowcase::StartFromCommandLine(GetWorld());
 
 	// After a map vote the session carries over; show the new map in the browser.
 	if (UArenaOnline* Online = UArenaOnline::Get(this))

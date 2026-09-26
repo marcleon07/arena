@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "ArenaTypes.h"
+#include "ArenaVisuals.h"
 #include "ArenaMap.generated.h"
 
 class UBoxComponent;
@@ -16,7 +17,7 @@ class ARENA_API AArenaBlock : public AActor
 
 public:
 	AArenaBlock();
-	void Init(const FVector& HalfExtent, const FLinearColor& Color);
+	void Init(const FVector& HalfExtent, const FArenaSurfaceStyle& Style);
 
 private:
 	UPROPERTY()

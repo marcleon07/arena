@@ -9,7 +9,7 @@ public class Arena : ModuleRules
 		bUseUnity = false;
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
-			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "NetCore", "Slate", "SlateCore", "AIModule", "OnlineSubsystem", "OnlineSubsystemUtils"
+			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "NetCore", "Slate", "SlateCore", "AIModule", "AnimationCore", "OnlineSubsystem", "OnlineSubsystemUtils"
 		});
 	}
 }
