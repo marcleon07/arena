@@ -322,6 +322,18 @@ TSharedRef<SWidget> SArenaMenu::MakeHostPage()
 				[Settings] { return static_cast<float>(Settings->HostTimeLimit); },
 				[Settings](float V) { Settings->HostTimeLimit = FMath::RoundToInt(V); })
 		]
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			MakeSliderRow(LOCTEXT("Bots", "Bots"), 0.f, 15.f, 1.f, 0,
+				[Settings] { return static_cast<float>(Settings->HostBots); },
+				[Settings](float V) { Settings->HostBots = FMath::RoundToInt(V); })
+		]
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			MakeSliderRow(LOCTEXT("BotSkill", "Bot skill (1 = easy, 5 = hard)"), 1.f, 5.f, 1.f, 0,
+				[Settings] { return static_cast<float>(Settings->HostBotSkill); },
+				[Settings](float V) { Settings->HostBotSkill = FMath::RoundToInt(V); })
+		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 18.f)
 		[
 			SNew(STextBlock)

@@ -56,6 +56,14 @@ public:
 	/** Tip of whichever gun this machine renders for this pawn. */
 	FVector GetMuzzleLocation() const;
 
+	/** True only on the machine of the human playing this pawn (not for bots on the server). */
+	bool IsLocalPlayerView() const { return IsLocallyControlled() && IsPlayerControlled(); }
+
+	// Used by bots, which drive the pawn through the same actions a player has.
+	void PullTrigger() { TryFire(); }
+	void EquipWeapon(EArenaWeapon Weapon) { SelectWeapon(Weapon); }
+	bool CanFire(EArenaWeapon Weapon) const;
+
 	void UpdateColors();
 
 protected:
@@ -79,7 +87,6 @@ protected:
 
 	void TryFire();
 	void SelectWeapon(EArenaWeapon Weapon);
-	bool CanFire(EArenaWeapon Weapon) const;
 	void FireHitscan(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon, int32 Seed);
 	void FireProjectile(const FVector& Origin, const FVector& Dir, EArenaWeapon Weapon);
 	void Die(AController* Killer, EArenaWeapon Weapon);

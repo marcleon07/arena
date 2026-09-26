@@ -123,7 +123,7 @@ void AArenaGameState::MulticastShot_Implementation(AArenaCharacter* Shooter, EAr
 	}
 	// The shooter already played the sound locally, and a remote shooter
 	// already drew its own predicted tracer.
-	if (!Shooter->IsLocallyControlled())
+	if (!Shooter->IsLocalPlayerView())
 	{
 		UArenaAudio::PlayAt(this, GetWeaponInfo(Weapon).FireSound, Shooter->GetMuzzleLocation(), 1.f, FMath::FRandRange(0.97f, 1.03f));
 	}

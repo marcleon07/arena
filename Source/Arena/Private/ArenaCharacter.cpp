@@ -151,7 +151,7 @@ void AArenaCharacter::UpdateColors()
 
 FVector AArenaCharacter::GetMuzzleLocation() const
 {
-	const UStaticMeshComponent* Gun = IsLocallyControlled() ? ViewGunMesh.Get() : WorldGunMesh.Get();
+	const UStaticMeshComponent* Gun = IsLocalPlayerView() ? ViewGunMesh.Get() : WorldGunMesh.Get();
 	// Cube is 100 cm, so half-length along X is Scale.X * 50.
 	return Gun->GetComponentLocation() + Gun->GetForwardVector() * Gun->GetComponentScale().X * 50.f;
 }
@@ -196,7 +196,7 @@ void AArenaCharacter::Tick(float DeltaSeconds)
 
 	UpdateMovementSounds(DeltaSeconds);
 
-	if (IsLocallyControlled())
+	if (IsLocalPlayerView())
 	{
 		Camera->SetFieldOfView(UArenaSettings::Get()->FieldOfView);
 	}
@@ -454,7 +454,10 @@ void AArenaCharacter::TryFire()
 	}
 	if (!CanFire(CurrentWeapon))
 	{
-		UArenaAudio::Play2D(this, EArenaSound::NoAmmo, 0.6f);
+		if (IsLocalPlayerView())
+		{
+			UArenaAudio::Play2D(this, EArenaSound::NoAmmo, 0.6f);
+		}
 		NextFireTime = Now + 0.4f;
 		OnNextWeapon();
 		return;
@@ -465,8 +468,11 @@ void AArenaCharacter::TryFire()
 	ViewKick = 1.f;
 	// Your own gun is heard without spatialization; others hear it via the server.
 	// The lightning gun fires 20 times a second, so keep it quieter.
-	const float OwnVolume = CurrentWeapon == EArenaWeapon::LightningGun ? 0.35f : 0.6f;
-	UArenaAudio::Play2D(this, Info.FireSound, OwnVolume, FMath::FRandRange(0.97f, 1.03f));
+	if (IsLocalPlayerView())
+	{
+		const float OwnVolume = CurrentWeapon == EArenaWeapon::LightningGun ? 0.35f : 0.6f;
+		UArenaAudio::Play2D(this, Info.FireSound, OwnVolume, FMath::FRandRange(0.97f, 1.03f));
+	}
 
 	const FVector Origin = Camera->GetComponentLocation();
 	const FVector Dir = GetControlRotation().Vector();

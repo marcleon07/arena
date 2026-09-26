@@ -312,7 +312,8 @@ void AArenaPlayerController::HostGame()
 {
 	const UArenaSettings* Settings = UArenaSettings::Get();
 	UGameplayStatics::OpenLevel(this, FName(TEXT("/Engine/Maps/Entry")), true,
-		FString::Printf(TEXT("listen?Arena=%s?FragLimit=%d?TimeLimit=%d"), *Settings->HostMap.ToString(), Settings->HostFragLimit, Settings->HostTimeLimit));
+		FString::Printf(TEXT("listen?Arena=%s?FragLimit=%d?TimeLimit=%d?Bots=%d?BotSkill=%d"), *Settings->HostMap.ToString(),
+			Settings->HostFragLimit, Settings->HostTimeLimit, Settings->HostBots, Settings->HostBotSkill));
 }
 
 void AArenaPlayerController::JoinGame(const FString& Address)
@@ -474,5 +475,24 @@ void AArenaPlayerController::ClientFragMessage_Implementation(const FString& Tex
 	if (AArenaHUD* ArenaHUD = GetHUD<AArenaHUD>())
 	{
 		ArenaHUD->ShowCenterMessage(Text, bGood ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor(1.f, 0.3f, 0.25f));
+	}
+}
+
+void AArenaPlayerController::AddBot(int32 Skill)
+{
+	AArenaGameMode* GM = GetWorld()->GetAuthGameMode<AArenaGameMode>();
+	if (!GM || AArenaGameState::IsMenuWorld(GetWorld()))
+	{
+		ClientMessage(TEXT("Only the host can add bots, from inside a match."));
+		return;
+	}
+	ClientMessage(GM->AddBot(Skill) ? TEXT("Bot added") : TEXT("Server is full"));
+}
+
+void AArenaPlayerController::RemoveBot()
+{
+	if (AArenaGameMode* GM = GetWorld()->GetAuthGameMode<AArenaGameMode>())
+	{
+		GM->RemoveBot();
 	}
 }

@@ -62,7 +62,8 @@ void AArenaProjectile::BeginPlay()
 		ShooterController = Shooter->GetController();
 	}
 	// The shooter heard their own shot when they pulled the trigger.
-	if (!Shooter || !Shooter->IsLocallyControlled())
+	const AArenaCharacter* ShooterCharacter = Cast<AArenaCharacter>(Shooter);
+	if (!ShooterCharacter || !ShooterCharacter->IsLocalPlayerView())
 	{
 		UArenaAudio::PlayAt(this, GetWeaponInfo(Weapon).FireSound, GetActorLocation());
 	}
