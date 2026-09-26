@@ -5,6 +5,7 @@
 #include "ArenaGameState.h"
 #include "ArenaHUD.h"
 #include "ArenaMap.h"
+#include "ArenaOnline.h"
 #include "ArenaPickup.h"
 #include "ArenaPlayerController.h"
 #include "ArenaPlayerState.h"
@@ -56,6 +57,12 @@ void AArenaGameMode::StartPlay()
 {
 	Super::StartPlay();
 	SpawnPickups();
+
+	// After a map vote the session carries over; show the new map in the browser.
+	if (UArenaOnline* Online = UArenaOnline::Get(this))
+	{
+		Online->UpdateListing(MapId, BotCount);
+	}
 }
 
 void AArenaGameMode::SpawnPickups()
@@ -95,10 +102,14 @@ void AArenaGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	if (AArenaPlayerState* PS = NewPlayer ? NewPlayer->GetPlayerState<AArenaPlayerState>() : nullptr)
 	{
-		// Default names are the machine name, which collides when testing locally.
-		// Players can rename with the "SetName" console command.
+		// Keep real names (Steam persona). Without an online account the name defaults to
+		// the machine name, which collides when testing locally, so number those.
 		PS->ColorIndex = NextColorIndex++;
-		ChangeName(NewPlayer, FString::Printf(TEXT("Player%d"), NextColorIndex), false);
+		const FString Name = PS->GetPlayerName();
+		if (Name.IsEmpty() || Name == TEXT("Player") || Name.StartsWith(FPlatformProcess::ComputerName()))
+		{
+			ChangeName(NewPlayer, FString::Printf(TEXT("Player%d"), NextColorIndex), false);
+		}
 	}
 	Super::PostLogin(NewPlayer);
 }

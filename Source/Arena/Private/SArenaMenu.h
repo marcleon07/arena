@@ -6,6 +6,7 @@
 
 class AArenaPlayerController;
 class SEditableTextBox;
+class SScrollBox;
 class SWidgetSwitcher;
 struct FArenaBindableAction;
 
@@ -36,6 +37,7 @@ private:
 		Host,
 		Join,
 		Settings,
+		Browse,
 	};
 
 	enum class ESettingsTab : int32
@@ -56,6 +58,8 @@ private:
 	TSharedRef<SWidget> MakeMainPage();
 	TSharedRef<SWidget> MakeHostPage();
 	TSharedRef<SWidget> MakeJoinPage();
+	TSharedRef<SWidget> MakeBrowsePage();
+	void RefreshServerList();
 	TSharedRef<SWidget> MakeSettingsPage();
 	TSharedRef<SWidget> MakeGeneralSettings();
 	TSharedRef<SWidget> MakeControlsSettings();
@@ -82,6 +86,7 @@ private:
 	TSharedPtr<SWidgetSwitcher> Switcher;
 	TSharedPtr<SEditableTextBox> NameBox;
 	TSharedPtr<SEditableTextBox> AddressBox;
+	TSharedPtr<SScrollBox> ServerList;
 
 	// Slate keeps pointers to styles, so they live as long as the widget.
 	FButtonStyle ButtonStyle;

@@ -11,7 +11,7 @@ namespace
 	constexpr float LinkRange = 750.f;
 	constexpr float StepLength = 50.f;
 	constexpr float MaxStepUp = 55.f;     // GoldSrc step is 18 units (46 cm) plus slack for ramps.
-	constexpr float MaxDrop = 450.f;      // Safe drops are one-way links.
+	constexpr float MaxDrop = 1100.f;     // Safe drops (no fall damage) are one-way links.
 	constexpr float KneeHeight = 45.f;
 	constexpr float HeadHeight = 150.f;
 	constexpr float Headroom = 190.f;

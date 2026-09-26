@@ -1,5 +1,6 @@
 ﻿#include "SArenaMenu.h"
 #include "ArenaMap.h"
+#include "ArenaOnline.h"
 #include "ArenaPlayerController.h"
 #include "ArenaSettings.h"
 #include "Brushes/SlateColorBrush.h"
@@ -157,6 +158,7 @@ void SArenaMenu::Construct(const FArguments& InArgs)
 					+ SWidgetSwitcher::Slot()[MakeHostPage()]
 					+ SWidgetSwitcher::Slot()[MakeJoinPage()]
 					+ SWidgetSwitcher::Slot()[MakeSettingsPage()]
+					+ SWidgetSwitcher::Slot()[MakeBrowsePage()]
 				]
 			]
 		]
@@ -196,6 +198,13 @@ FReply SArenaMenu::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& InKey
 
 void SArenaMenu::ShowPage(EPage Page)
 {
+	if (Page == EPage::Browse && Owner.IsValid())
+	{
+		if (UArenaOnline* Online = UArenaOnline::Get(Owner.Get()))
+		{
+			Online->FindGames();
+		}
+	}
 	if (CurrentPage == EPage::Settings && Page != EPage::Settings)
 	{
 		SaveSettings();
@@ -242,9 +251,22 @@ TSharedRef<SWidget> SArenaMenu::MakeMainPage()
 	else
 	{
 		AddButton(LOCTEXT("Host", "HOST GAME"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Host); return FReply::Handled(); }), true);
-		AddButton(LOCTEXT("Join", "JOIN GAME"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Join); return FReply::Handled(); }));
+		AddButton(LOCTEXT("Browse", "FIND GAMES"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Browse); return FReply::Handled(); }));
+		AddButton(LOCTEXT("Join", "JOIN BY IP"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Join); return FReply::Handled(); }));
 	}
 	AddButton(LOCTEXT("Settings", "SETTINGS"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Settings); return FReply::Handled(); }));
+	const UArenaOnline* Online = Owner.IsValid() ? UArenaOnline::Get(Owner.Get()) : nullptr;
+	if (bInGame && Online && Online->IsSteam())
+	{
+		AddButton(LOCTEXT("Invite", "INVITE FRIENDS"), FOnClicked::CreateLambda([this]
+		{
+			if (UArenaOnline* Online = Owner.IsValid() ? UArenaOnline::Get(Owner.Get()) : nullptr)
+			{
+				Online->ShowInviteUI();
+			}
+			return FReply::Handled();
+		}));
+	}
 	if (bInGame)
 	{
 		AddButton(LOCTEXT("Disconnect", "LEAVE MATCH"), FOnClicked::CreateLambda([this]
@@ -334,10 +356,16 @@ TSharedRef<SWidget> SArenaMenu::MakeHostPage()
 				[Settings] { return static_cast<float>(Settings->HostBotSkill); },
 				[Settings](float V) { Settings->HostBotSkill = FMath::RoundToInt(V); })
 		]
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			MakeCheckRow(LOCTEXT("FriendsOnly", "Friends only (Steam)"),
+				[Settings] { return Settings->bHostFriendsOnly; },
+				[Settings](bool b) { Settings->bHostFriendsOnly = b; })
+		]
 		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 4.f, 0.f, 18.f)
 		[
 			SNew(STextBlock)
-			.Text(LOCTEXT("HostHint", "Friends join with your IP address (port 7777)."))
+			.Text(LOCTEXT("HostHint", "Your game is listed in Find Games (on Steam, or the local network without it). Friends can also join from Steam or by your IP (port 7777)."))
 			.Font(Font("Regular", 12))
 			.ColorAndOpacity(DimText)
 			.AutoWrapText(true)
@@ -667,6 +695,112 @@ void SArenaMenu::EndCapture()
 {
 	CaptureAction = NAME_None;
 	FSlateApplication::Get().SetKeyboardFocus(SharedThis(this));
+}
+
+TSharedRef<SWidget> SArenaMenu::MakeBrowsePage()
+{
+	TWeakObjectPtr<AArenaPlayerController> WeakOwner = Owner;
+	auto GetOnline = [WeakOwner]() -> UArenaOnline*
+	{
+		return WeakOwner.IsValid() ? UArenaOnline::Get(WeakOwner.Get()) : nullptr;
+	};
+	if (UArenaOnline* Online = GetOnline())
+	{
+		Online->OnSearchUpdated.AddSP(this, &SArenaMenu::RefreshServerList);
+	}
+
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight()[MakeHeading(LOCTEXT("BrowseHeading", "Find games"))]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)
+		[
+			SNew(STextBlock)
+			.Font(Font("Regular", 13))
+			.ColorAndOpacity(DimText)
+			.AutoWrapText(true)
+			.Text_Lambda([GetOnline]
+			{
+				const UArenaOnline* Online = GetOnline();
+				return Online ? Online->GetStatusText() : LOCTEXT("NoOnline", "Online play isn't available.");
+			})
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 14.f)
+		[
+			SNew(SBox)
+			.HeightOverride(SettingsHeight - 120.f)
+			[
+				SAssignNew(ServerList, SScrollBox)
+			]
+		]
+		+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 10.f)
+		[
+			MakeButton(LOCTEXT("Refresh", "REFRESH"), FOnClicked::CreateLambda([GetOnline]
+			{
+				if (UArenaOnline* Online = GetOnline()) { Online->FindGames(); }
+				return FReply::Handled();
+			}), true)
+		]
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			MakeButton(LOCTEXT("Back", "BACK"), FOnClicked::CreateLambda([this] { ShowPage(EPage::Main); return FReply::Handled(); }))
+		];
+}
+
+void SArenaMenu::RefreshServerList()
+{
+	const UArenaOnline* Online = Owner.IsValid() ? UArenaOnline::Get(Owner.Get()) : nullptr;
+	if (!ServerList.IsValid() || !Online)
+	{
+		return;
+	}
+	ServerList->ClearChildren();
+	for (const FArenaServerEntry& Entry : Online->GetSearchResults())
+	{
+		const int32 Index = Entry.ResultIndex;
+		const FText Details = Entry.Bots > 0
+			? FText::Format(LOCTEXT("RowBots", "{0}   {1}/{2} players + {3} bots"), ArenaMap::Get(Entry.MapId).DisplayName, Entry.Players, Entry.MaxPlayers, Entry.Bots)
+			: FText::Format(LOCTEXT("Row", "{0}   {1}/{2} players"), ArenaMap::Get(Entry.MapId).DisplayName, Entry.Players, Entry.MaxPlayers);
+		// Steam lobbies don't report ping (9999); show a dash instead.
+		const FText Ping = Entry.PingMs > 0 && Entry.PingMs < 999 ? FText::Format(LOCTEXT("Ping", "{0} ms"), Entry.PingMs) : FText::FromString(TEXT("-"));
+
+		ServerList->AddSlot().Padding(0.f, 0.f, 12.f, 6.f)
+		[
+			SNew(SBox)
+			.HeightOverride(56.f)
+			[
+				SNew(SButton)
+				.ButtonStyle(&KeyButtonStyle)
+				.VAlign(VAlign_Center)
+				.ContentPadding(FMargin(14.f, 4.f))
+				.OnClicked_Lambda([this, Index]
+				{
+					if (UArenaOnline* Online = Owner.IsValid() ? UArenaOnline::Get(Owner.Get()) : nullptr)
+					{
+						Online->JoinGame(Index);
+					}
+					return FReply::Handled();
+				})
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.f)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Entry.HostName)).Font(Font("Bold", 15)).ColorAndOpacity(TextColor)
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(Details).Font(Font("Regular", 12)).ColorAndOpacity(DimText)
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(Ping).Font(Font("Regular", 12)).ColorAndOpacity(DimText)
+					]
+				]
+			]
+		];
+	}
 }
 
 // ---------------------------------------------------------------------------

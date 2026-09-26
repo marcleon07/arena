@@ -28,7 +28,9 @@ Game** in the editor) opens the **main menu** over a slow camera orbit of the ar
 
 - **Host Game**: pick a map, frag limit, time limit, number of bots and bot skill,
   then start a listen server that friends can join.
-- **Join Game**: enter an IP (or `IP:port`). The last address is remembered.
+- **Find Games**: lists Arena games on Steam (or on your local network without Steam),
+  with map, players, bots and ping. Click one to join.
+- **Join by IP**: enter an IP (or `IP:port`). The last address is remembered.
 - **Settings** has two tabs:
   - **General**: player name, mouse sensitivity, invert mouse, field of view, volume,
     auto-hop, fullscreen, VSync, frame-rate limit and an FPS counter.
@@ -39,8 +41,8 @@ Game** in the editor) opens the **main menu** over a slow camera orbit of the ar
 
   Everything is saved to `Saved/Config/Windows/GameUserSettings.ini`.
 
-In a match, **Esc** (or **F10**) opens the pause menu: Resume, Settings, Leave Match and
-Quit. The match keeps running while it's open. In Play-In-Editor, Esc stops the
+In a match, **Esc** (or **F10**) opens the pause menu: Resume, Invite Friends (on Steam),
+Settings, Leave Match and Quit. The match keeps running while it's open. In Play-In-Editor, Esc stops the
 session, so use F10 there.
 
 Playing in the editor as **Listen Server**, or running `Host.bat` / `Join.bat`, skips
@@ -88,6 +90,34 @@ a match without waiting for a human.
 
 Bots drive their character through the same inputs a player has (movement, aim,
 jump, fire), so they move with the same GoldSrc physics.
+
+## Steam
+
+With the Steam client running, the game uses Steam through Unreal's Online Subsystem:
+
+- **Hosting** creates a Steam lobby. The game shows up in other players' **Find Games**,
+  or only for your Steam friends if you tick **Friends only** on the Host page.
+- **Joining** goes through Steam networking (Steam Sockets), so the host doesn't need
+  to forward any ports.
+- **Invites:** use **Invite Friends** in the pause menu, or friends can pick **Join Game**
+  on you in their Steam friends list. Accepting an invite, even with the game closed,
+  goes straight into the match.
+- **Names:** players show their Steam name. A name set in Settings overrides it.
+- After a map vote the listing updates to the new map.
+
+Without Steam (not running, or launched with `-nosteam`), the same menus work over the
+local network, and Join by IP always works.
+
+**App ID.** `Config/DefaultEngine.ini` uses Valve's public test app ID **480**
+("Spacewar"), which every Steamworks developer tests with. In Steam, the game shows as
+Spacewar in your friends list. To ship on Steam, get your own app ID through Steamworks
+(Steam Direct) and replace `SteamDevAppId=480`.
+
+**Testing notes.**
+- Steam won't let an account join or read a lobby it's already in, so test joining with
+  two Steam accounts on two PCs (or a friend).
+- Steam only works in a real game launch (Standalone Game, `Host.bat`, a packaged
+  build), not in Play-In-Editor.
 
 ## Play outside the editor
 
@@ -219,6 +249,7 @@ sound is skipped with a log warning.
 | `ArenaAudio` | Loads `/Game/Audio` and plays 2D and positional sounds |
 | `SArenaMenu` | Slate main and pause menu (no widget assets) |
 | `ArenaSettings` | Per-user preferences and key bindings saved to `GameUserSettings.ini` |
+| `ArenaOnline` | Online sessions: host/list, find, join, invites (Steam, or LAN fallback) |
 
 ## Known limitations
 

@@ -14,6 +14,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "ArenaMap.h"
+#include "ArenaOnline.h"
 #include "SArenaMapVote.h"
 #include "SArenaMenu.h"
 #include "Widgets/SWeakWidget.h"
@@ -311,9 +312,15 @@ void AArenaPlayerController::ServerVoteMap_Implementation(FName Map)
 void AArenaPlayerController::HostGame()
 {
 	const UArenaSettings* Settings = UArenaSettings::Get();
-	UGameplayStatics::OpenLevel(this, FName(TEXT("/Engine/Maps/Entry")), true,
-		FString::Printf(TEXT("listen?Arena=%s?FragLimit=%d?TimeLimit=%d?Bots=%d?BotSkill=%d"), *Settings->HostMap.ToString(),
-			Settings->HostFragLimit, Settings->HostTimeLimit, Settings->HostBots, Settings->HostBotSkill));
+	const FString Options = FString::Printf(TEXT("listen?Arena=%s?FragLimit=%d?TimeLimit=%d?Bots=%d?BotSkill=%d"), *Settings->HostMap.ToString(),
+		Settings->HostFragLimit, Settings->HostTimeLimit, Settings->HostBots, Settings->HostBotSkill);
+	// Lists the game on Steam (or the LAN) first, then opens the map.
+	if (UArenaOnline* Online = UArenaOnline::Get(this))
+	{
+		Online->HostGame(Options, Settings->HostMap, Settings->HostBots, Settings->bHostFriendsOnly);
+		return;
+	}
+	UGameplayStatics::OpenLevel(this, FName(TEXT("/Engine/Maps/Entry")), true, Options);
 }
 
 void AArenaPlayerController::JoinGame(const FString& Address)
@@ -323,6 +330,10 @@ void AArenaPlayerController::JoinGame(const FString& Address)
 
 void AArenaPlayerController::Disconnect()
 {
+	if (UArenaOnline* Online = UArenaOnline::Get(this))
+	{
+		Online->LeaveSession();
+	}
 	// Loading the map without "listen" gives a standalone world, i.e. the main menu.
 	UGameplayStatics::OpenLevel(this, FName(TEXT("/Engine/Maps/Entry")));
 }
